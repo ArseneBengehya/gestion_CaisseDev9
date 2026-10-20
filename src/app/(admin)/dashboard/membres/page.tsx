@@ -1,12 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-
 import { UserPlus, Users, UserCheck, UserX } from 'lucide-react';
-import ViewMembreModal from '@/src/components/modals/ViewMembreModal';
-import EditMembreModal from '@/src/components/modals/EditMembreModal';
-import AddMembreModal from '@/src/components/modals/AddMembreModal';
 import DataTable, { Column } from '@/src/components/ui/DataTable';
+import Modal from '@/src/components/ui/Modal';
 import { Membre } from '@/src/types';
 
 const initialMembres: Membre[] = [
@@ -41,32 +38,28 @@ const initialMembres: Membre[] = [
 
 export default function MembresPage() {
   const [membres, setMembres] = useState<Membre[]>(initialMembres);
-  
-  // États d'ouverture des Modals
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isViewOpen, setIsViewOpen] = useState(false);
-  const [selectedMembre, setSelectedMembre] = useState<Membre | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // État du formulaire partagé
+  // États du formulaire d'ajout
   const [formData, setFormData] = useState({
     nom: '',
     prenom: '',
     email: '',
     telephone: '',
-    statut: 'ACTIF' as 'ACTIF' | 'INACTIF',
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // 1. Ajouter un membre
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddMembre = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nom || !formData.prenom || !formData.telephone) return;
+    if (!formData.nom || !formData.prenom || !formData.telephone) {
+      alert('Veuillez remplir les champs obligatoires.');
+      return;
+    }
 
-    const nouveau: Membre = {
+    const nouveauMembre: Membre = {
       id: Date.now().toString(),
       nom: formData.nom,
       prenom: formData.prenom,
@@ -76,48 +69,11 @@ export default function MembresPage() {
       statut: 'ACTIF',
     };
 
-    setMembres([nouveau, ...membres]);
-    setIsAddOpen(false);
+    setMembres([nouveauMembre, ...membres]);
+    setFormData({ nom: '', prenom: '', email: '', telephone: '' });
+    setIsAddModalOpen(false);
   };
 
-  // 2. Modifier un membre
-  const handleEditSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMembre) return;
-
-    setMembres(
-      membres.map((m) =>
-        m.id === selectedMembre.id ? { ...m, ...formData } : m
-      )
-    );
-    setIsEditOpen(false);
-  };
-
-  // Handlers pour ouvrir les modals
-  const openEdit = (membre: Membre) => {
-    setSelectedMembre(membre);
-    setFormData({
-      nom: membre.nom,
-      prenom: membre.prenom,
-      email: membre.email,
-      telephone: membre.telephone,
-      statut: membre.statut,
-    });
-    setIsEditOpen(true);
-  };
-
-  const openView = (membre: Membre) => {
-    setSelectedMembre(membre);
-    setIsViewOpen(true);
-  };
-
-  const handleDelete = (membre: Membre) => {
-    if (confirm(`Supprimer ${membre.prenom} ${membre.nom} ?`)) {
-      setMembres(membres.filter((m) => m.id !== membre.id));
-    }
-  };
-
-  // Colonnes de la DataTable
   const columns: Column<Membre>[] = [
     {
       header: 'Membre',
@@ -128,8 +84,14 @@ export default function MembresPage() {
         </div>
       ),
     },
-    { header: 'Téléphone', accessor: 'telephone' },
-    { header: "Date d'Adhésion", accessor: 'dateAdhesion' },
+    {
+      header: 'Téléphone',
+      accessor: 'telephone',
+    },
+    {
+      header: 'Date d\'Adhésion',
+      accessor: 'dateAdhesion',
+    },
     {
       header: 'Statut',
       accessor: (item) => (
@@ -146,6 +108,10 @@ export default function MembresPage() {
     },
   ];
 
+  const totalMembres = membres.length;
+  const membresActifs = membres.filter((m) => m.statut === 'ACTIF').length;
+  const membresInactifs = membres.filter((m) => m.statut === 'INACTIF').length;
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -155,10 +121,7 @@ export default function MembresPage() {
           <p className="text-sm text-slate-500">Gérez la liste des membres inscrits à la caisse.</p>
         </div>
         <button
-          onClick={() => {
-            setFormData({ nom: '', prenom: '', email: '', telephone: '', statut: 'ACTIF' });
-            setIsAddOpen(true);
-          }}
+          onClick={() => setIsAddModalOpen(true)}
           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
         >
           <UserPlus size={18} />
@@ -166,30 +129,26 @@ export default function MembresPage() {
         </button>
       </div>
 
-      {/* Cartes de statistiques */}
+      {/* Statistiques */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-slate-500">Total Membres</p>
-            <p className="text-2xl font-bold text-slate-800 mt-1">{membres.length}</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{totalMembres}</p>
           </div>
           <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><Users size={22} /></div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-slate-500">Membres Actifs</p>
-            <p className="text-2xl font-bold text-emerald-600 mt-1">
-              {membres.filter((m) => m.statut === 'ACTIF').length}
-            </p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">{membresActifs}</p>
           </div>
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><UserCheck size={22} /></div>
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-medium text-slate-500">Membres Inactifs</p>
-            <p className="text-2xl font-bold text-rose-600 mt-1">
-              {membres.filter((m) => m.statut === 'INACTIF').length}
-            </p>
+            <p className="text-2xl font-bold text-rose-600 mt-1">{membresInactifs}</p>
           </div>
           <div className="p-3 bg-rose-50 text-rose-600 rounded-lg"><UserX size={22} /></div>
         </div>
@@ -201,33 +160,88 @@ export default function MembresPage() {
         columns={columns}
         searchKey="nom"
         searchPlaceholder="Rechercher par nom..."
-        onView={openView}
-        onEdit={openEdit}
-        onDelete={handleDelete}
+        onView={(item) => alert(`Vue détaillée de : ${item.nom}`)}
+        onEdit={(item) => alert(`Édition de : ${item.nom}`)}
+        onDelete={(item) => {
+          if (confirm(`Voulez-vous vraiment supprimer ${item.nom} ?`)) {
+            setMembres(membres.filter((m) => m.id !== item.id));
+          }
+        }}
       />
 
-      {/* Les Modals Réutilisables */}
-      <AddMembreModal
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        formData={formData}
-        onChange={handleInputChange}
-        onSubmit={handleAddSubmit}
-      />
+      {/* Modal d'Ajout de Membre */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Ajouter un nouveau membre"
+        maxWidth="md"
+      >
+        <form onSubmit={handleAddMembre} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nom</label>
+            <input
+              type="text"
+              name="nom"
+              required
+              value={formData.nom}
+              onChange={handleInputChange}
+              placeholder="Ex: Cubaka"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Prénom</label>
+            <input
+              type="text"
+              name="prenom"
+              required
+              value={formData.prenom}
+              onChange={handleInputChange}
+              placeholder="Ex: Arsène"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Email</label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              placeholder="Ex: arsene@masi.com"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Téléphone</label>
+            <input
+              type="text"
+              name="telephone"
+              required
+              value={formData.telephone}
+              onChange={handleInputChange}
+              placeholder="Ex: +243..."
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-      <EditMembreModal
-        isOpen={isEditOpen}
-        onClose={() => setIsEditOpen(false)}
-        formData={formData}
-        onChange={handleInputChange}
-        onSubmit={handleEditSubmit}
-      />
-
-      <ViewMembreModal
-        isOpen={isViewOpen}
-        onClose={() => setIsViewOpen(false)}
-        membre={selectedMembre}
-      />
+          <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(false)}
+              className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition-colors"
+            >
+              Enregistrer
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
