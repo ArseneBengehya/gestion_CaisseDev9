@@ -1,140 +1,172 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PiggyBank, PlusCircle, AlertCircle, CheckCircle } from 'lucide-react';
 import { Membre, StatutMembreContribution } from '@/src/types';
 import DataTable, { Column } from '@/src/components/ui/DataTable';
 import AddContributionDrawer from '@/src/components/modals/AddContributionDrawer';
 import ViewHistoriqueModal from '@/src/components/modals/ViewHistoriqueModal';
 
-const mockMembres: Membre[] = [
-  { id: '1', nom: 'Bengehya', prenom: 'Arsène', email: 'arsene@example.com', telephone: '+243990000001', dateAdhesion: '2026-01-15', statut: 'ACTIF' },
-  { id: '2', nom: 'Mubalama', prenom: 'Sarah', email: 'sarah@example.com', telephone: '+243990000002', dateAdhesion: '2026-02-10', statut: 'ACTIF' },
-  { id: '3', nom: 'Kasereka', prenom: 'David', email: 'david@example.com', telephone: '+243990000003', dateAdhesion: '2026-03-01', statut: 'INACTIF' },
-];
+// Import Firestore
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  doc,
+} from 'firebase/firestore';
+import { db } from '@/src/lib/firebase';
 
-const initialContributionsData: StatutMembreContribution[] = [
-  {
-    membre: mockMembres[0],
-    totalContributionsCount: 2,
-    montantTotalCotise: 10000,
-    detteActuelle: 0,
-    moisPayes: ['2026-01', '2026-02'],
-    moisImpayes: [],
-    moisFutursPayes: [],
-    dernierPaiementDate: '2026-02-01',
-  },
-  {
-    membre: mockMembres[1],
-    totalContributionsCount: 1,
-    montantTotalCotise: 5000,
-    detteActuelle: 5000,
-    moisPayes: ['2026-02'],
-    moisImpayes: ['2026-03'],
-    moisFutursPayes: [],
-    dernierPaiementDate: '2026-02-15',
-  },
-];
+interface ContributionDoc {
+  id: string;
+  membreId: string;
+  nombreMois: number;
+  montantVerse: number;
+  modePaiement: string;
+  note: string;
+  datePaiement: string;
+}
 
 export default function ContributionsPage() {
-  const [data, setData] = useState<StatutMembreContribution[]>(initialContributionsData);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [membres, setMembres] = useState<Membre[]>([]);
+  const [rawContributions, setRawContributions] = useState<ContributionDoc[]>([]);
+  const [contributionsData, setContributionsData] = useState<StatutMembreContribution[]>([]);
   
+  // Paramètres globaux de la caisse (récupérés depuis Firestore)
+  const [caisseConfig, setCaisseConfig] = useState({
+    dateDebutCaisse: '2025-01-01',
+    cotisationMensuelle: 5000,
+    cotisationMoisSpecial: 10000,
+  });
+
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedContribution, setSelectedContribution] = useState<StatutMembreContribution | null>(null);
 
-  // Fonction dynamique pour ajouter de nouveaux mois payés
-//   const handleAddContribution = (formData: { membreId: string; nombreMois: number; modePaiement: string; note: string }) => {
-//     const MONTANT_MENSUEL = 5000;
-//     const montantVerse = formData.nombreMois * MONTANT_MENSUEL;
-
-//     setData((prevData) =>
-//       prevData.map((item) => {
-//         if (item.membre.id === formData.membreId) {
-//           // Génération dynamique de faux mois payés pour l'exemple (ex: '2026-03', '2026-04'...)
-//           const nouveauxMois = Array.from({ length: formData.nombreMois }, (_, index) => {
-//             const moisNum = item.moisPayes.length + index + 1;
-//             const moisFormat = moisNum < 10 ? `0${moisNum}` : `${moisNum}`;
-//             return `2026-${moisFormat}`;
-//           });
-
-//           const updatedMoisPayes = [...item.moisPayes, ...nouveauxMois];
-//           const nouveauTotal = item.montantTotalCotise + montantVerse;
-
-//           return {
-//             ...item,
-//             totalContributionsCount: item.totalContributionsCount + formData.nombreMois,
-//             montantTotalCotise: nouveauTotal,
-//             moisPayes: updatedMoisPayes,
-//             dernierPaiementDate: new Date().toISOString().split('T')[0],
-//           };
-//         }
-//         return item;
-//       })
-//     );
-
-//     alert(`Contribution de ${montantVerse.toLocaleString()} FC enregistrée avec succès !`);
-//   };
-
-// Fonction dynamique pour ajouter ou mettre à jour les contributions
-  const handleAddContribution = (formData: { membreId: string; nombreMois: number; modePaiement: string; note: string }) => {
-    const MONTANT_MENSUEL = 5000;
-    const montantVerse = formData.nombreMois * MONTANT_MENSUEL;
-
-    setData((prevData) => {
-      // 1. Vérifier si le membre a déjà une ligne de contribution dans le tableau
-      const existeDeja = prevData.some((item) => item.membre.id === formData.membreId);
-
-      if (!existeDeja) {
-        // Si le membre n'y est pas encore, on le trouve dans mockMembres et on crée sa ligne
-        const membreTrouve = mockMembres.find((m) => m.id === formData.membreId);
-        if (!membreTrouve) return prevData;
-
-        const nouveauxMois = Array.from({ length: formData.nombreMois }, (_, index) => {
-          const moisNum = index + 1;
-          const moisFormat = moisNum < 10 ? `0${moisNum}` : `${moisNum}`;
-          return `2026-${moisFormat}`;
+  // 1. ÉCOUTER LES PARAMÈTRES DE LA CAISSE (Firestore)
+  useEffect(() => {
+    const unsubConfig = onSnapshot(doc(db, 'settings', 'caisse_config'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setCaisseConfig({
+          dateDebutCaisse: data.dateDebutCaisse || '2025-01-01',
+          cotisationMensuelle: data.cotisationMensuelle || 5000,
+          cotisationMoisSpecial: data.cotisationMoisSpecial || 10000,
         });
-
-        const nouvelleEntree: StatutMembreContribution = {
-          membre: membreTrouve,
-          totalContributionsCount: formData.nombreMois,
-          montantTotalCotise: montantVerse,
-          detteActuelle: 0,
-          moisPayes: nouveauxMois,
-          moisImpayes: [],
-          moisFutursPayes: [],
-          dernierPaiementDate: new Date().toISOString().split('T')[0],
-        };
-
-        return [nouvelleEntree, ...prevData];
       }
-
-      // 2. S'il existe déjà, on met à jour ses données
-      return prevData.map((item) => {
-        if (item.membre.id === formData.membreId) {
-          const nouveauxMois = Array.from({ length: formData.nombreMois }, (_, index) => {
-            const moisNum = item.moisPayes.length + index + 1;
-            const moisFormat = moisNum < 10 ? `0${moisNum}` : `${moisNum}`;
-            return `2026-${moisFormat}`;
-          });
-
-          return {
-            ...item,
-            totalContributionsCount: item.totalContributionsCount + formData.nombreMois,
-            montantTotalCotise: item.montantTotalCotise + montantVerse,
-            moisPayes: [...item.moisPayes, ...nouveauxMois],
-            dernierPaiementDate: new Date().toISOString().split('T')[0],
-          };
-        }
-        return item;
-      });
     });
 
-    alert(`Contribution de ${montantVerse.toLocaleString()} FC enregistrée avec succès !`);
+    return () => unsubConfig();
+  }, []);
+
+  // 2. ÉCOUTER LES MEMBRES FIRESTORE
+  useEffect(() => {
+    const unsubMembres = onSnapshot(collection(db, 'membres'), (snapshot) => {
+      const membresData: Membre[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          nom: data.nom || '',
+          prenom: data.prenom || '',
+          nomComplet: data.nomComplet || `${data.prenom || ''} ${data.nom || ''}`.trim(),
+          telephone: data.telephone || '',
+          email: data.email || '',
+          statut: data.statut || 'ACTIF',
+          dateAdhesion: data.createdAt || new Date().toISOString().split('T')[0],
+        };
+      }) as Membre[];
+
+      setMembres(membresData);
+    });
+
+    return () => unsubMembres();
+  }, []);
+
+  // 3. ÉCOUTER LES TRANSACTIONS DE CONTRIBUTIONS FIRESTORE
+  useEffect(() => {
+    const unsubContributions = onSnapshot(collection(db, 'contributions'), (snapshot) => {
+      const contribs: ContributionDoc[] = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as ContributionDoc[];
+
+      setRawContributions(contribs);
+      setIsLoading(false);
+    });
+
+    return () => unsubContributions();
+  }, []);
+
+  // 4. FUSIONNER & CALCULER LES TOTAUX & DETTES DYNAMIQUEMENT SELON LA DATE DE DÉBUT
+  useEffect(() => {
+    if (membres.length === 0) return;
+
+    // Calculer le nombre de mois théoriques attendus entre la date de début de la caisse et aujourd'hui
+    const dateDebut = new Date(caisseConfig.dateDebutCaisse);
+    const maintenant = new Date();
+    const moisAttendus = Math.max(
+      1,
+      (maintenant.getFullYear() - dateDebut.getFullYear()) * 12 +
+        (maintenant.getMonth() - dateDebut.getMonth()) +
+        1
+    );
+
+    const montantMensuel = caisseConfig.cotisationMensuelle;
+
+    const computed: StatutMembreContribution[] = membres.map((membre) => {
+      const memberContribs = rawContributions.filter((c) => c.membreId === membre.id);
+
+      // Cumul du montant versé
+      const montantTotalCotise = memberContribs.reduce((sum, c) => sum + (c.montantVerse || 0), 0);
+      
+      // Cumul du nombre de mois payés
+      const totalMoisPayes = memberContribs.reduce((sum, c) => sum + (c.nombreMois || 0), 0);
+
+      // Calcul de la dette actuelle (Mois attendus - Mois payés * montant mensuel, minimum 0)
+      const moisEnRetard = Math.max(0, moisAttendus - totalMoisPayes);
+      const detteActuelle = moisEnRetard * montantMensuel;
+
+      const moisPayes = Array.from({ length: totalMoisPayes }, (_, i) => `Mois ${i + 1}`);
+
+      return {
+        membre,
+        totalContributionsCount: memberContribs.length,
+        montantTotalCotise,
+        detteActuelle,
+        moisPayes,
+        moisImpayes: Array.from({ length: moisEnRetard }, (_, i) => `Retard ${i + 1}`),
+        moisFutursPayes: [],
+        dernierPaiementDate: memberContribs.length > 0 
+          ? new Date(memberContribs[memberContribs.length - 1].datePaiement).toLocaleDateString('fr-FR')
+          : '-',
+      };
+    });
+
+    setContributionsData(computed);
+  }, [membres, rawContributions, caisseConfig]);
+
+  // 5. ENREGISTRER UNE CONTRIBUTION DANS FIRESTORE
+  const handleAddContribution = async (formData: { membreId: string; nombreMois: number; modePaiement: string; note: string }) => {
+    try {
+      const montantVerse = formData.nombreMois * caisseConfig.cotisationMensuelle;
+
+      await addDoc(collection(db, 'contributions'), {
+        membreId: formData.membreId,
+        nombreMois: formData.nombreMois,
+        montantVerse,
+        modePaiement: formData.modePaiement,
+        note: formData.note,
+        datePaiement: new Date().toISOString(),
+      });
+
+      alert(`Contribution de ${montantVerse.toLocaleString()} FC enregistrée avec succès !`);
+      setIsDrawerOpen(false);
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement de la contribution :", error);
+      alert("Erreur lors de l'enregistrement.");
+    }
   };
-
-
 
   const openHistoriqueView = (item: StatutMembreContribution) => {
     setSelectedContribution(item);
@@ -146,15 +178,17 @@ export default function ContributionsPage() {
       header: 'Membre',
       accessor: (item) => (
         <div>
-          <p className="font-semibold text-slate-800">{item.membre.prenom} {item.membre.nom}</p>
-          <p className="text-xs text-slate-500">{item.membre.telephone}</p>
+          <p className="font-semibold text-slate-800 dark:text-white">
+            {item.membre.nomComplet || `${item.membre.prenom} ${item.membre.nom}`}
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{item.membre.telephone}</p>
         </div>
       ),
     },
     {
       header: 'Total Cotisé',
       accessor: (item) => (
-        <span className="font-semibold text-emerald-600">
+        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
           {item.montantTotalCotise.toLocaleString()} FC
         </span>
       ),
@@ -162,7 +196,7 @@ export default function ContributionsPage() {
     {
       header: 'Dette Actuelle',
       accessor: (item) => (
-        <span className={`font-semibold ${item.detteActuelle > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+        <span className={`font-semibold ${item.detteActuelle > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
           {item.detteActuelle > 0 ? `${item.detteActuelle.toLocaleString()} FC` : 'Aucune'}
         </span>
       ),
@@ -170,30 +204,24 @@ export default function ContributionsPage() {
     {
       header: 'Mois Payés',
       accessor: (item) => (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700">
+        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
           {item.moisPayes.length} mois
-        </span>
-      ),
-    },
-    {
-      header: 'Avances (Mois Futurs)',
-      accessor: (item) => (
-        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-50 text-purple-700">
-          {item.moisFutursPayes.length} mois
         </span>
       ),
     },
   ];
 
-  const totalCotisations = data.reduce((acc, curr) => acc + curr.montantTotalCotise, 0);
-  const totalDettes = data.reduce((acc, curr) => acc + curr.detteActuelle, 0);
+  const totalCotisations = contributionsData.reduce((acc, curr) => acc + curr.montantTotalCotise, 0);
+  const totalDettes = contributionsData.reduce((acc, curr) => acc + curr.detteActuelle, 0);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Gestion des Contributions</h2>
-          <p className="text-sm text-slate-500">Suivez les cotisations, les avances et les dettes des membres.</p>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Gestion des Contributions</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Suivi basé sur le lancement de la caisse au <strong>{caisseConfig.dateDebutCaisse}</strong> ({caisseConfig.cotisationMensuelle.toLocaleString()} FC/mois).
+          </p>
         </div>
         <button
           onClick={() => setIsDrawerOpen(true)}
@@ -205,44 +233,48 @@ export default function ContributionsPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium text-slate-500">Total Cotisé</p>
-            <p className="text-2xl font-bold text-emerald-600 mt-1">{totalCotisations.toLocaleString()} FC</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Cotisé</p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{totalCotisations.toLocaleString()} FC</p>
           </div>
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><PiggyBank size={22} /></div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 rounded-lg"><PiggyBank size={22} /></div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium text-slate-500">Dettes Globales</p>
-            <p className="text-2xl font-bold text-rose-600 mt-1">{totalDettes.toLocaleString()} FC</p>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Dettes Globales</p>
+            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">{totalDettes.toLocaleString()} FC</p>
           </div>
-          <div className="p-3 bg-rose-50 text-rose-600 rounded-lg"><AlertCircle size={22} /></div>
+          <div className="p-3 bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 rounded-lg"><AlertCircle size={22} /></div>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium text-slate-500">Membres à jour</p>
-            <p className="text-2xl font-bold text-blue-600 mt-1">
-              {data.filter((d) => d.detteActuelle === 0).length} / {data.length}
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Membres à jour</p>
+            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+              {contributionsData.filter((d) => d.detteActuelle === 0).length} / {contributionsData.length}
             </p>
           </div>
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg"><CheckCircle size={22} /></div>
+          <div className="p-3 bg-blue-50 text-blue-600 dark:bg-blue-400 rounded-lg"><CheckCircle size={22} /></div>
         </div>
       </div>
 
-      <DataTable
-        data={data.map((d) => ({ ...d, id: d.membre.id }))}
-        columns={columns}
-        onView={openHistoriqueView}
-      />
+      {isLoading ? (
+        <div className="p-8 text-center text-slate-500">Chargement des contributions depuis Firestore...</div>
+      ) : (
+        <DataTable
+          data={contributionsData.map((d) => ({ ...d, id: d.membre.id }))}
+          columns={columns}
+          onView={openHistoriqueView}
+        />
+      )}
 
       <AddContributionDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        membres={mockMembres}
-        montantMensuelDefaut={5000}
+        membres={membres}
+        montantMensuelDefaut={caisseConfig.cotisationMensuelle}
         onSubmit={handleAddContribution}
       />
 

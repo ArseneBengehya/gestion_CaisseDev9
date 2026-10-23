@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-mantine-color-scheme="dark"], [data-mantine-color-scheme="dark"] *));
+
 :root {
-  --background: #ffffff;
+  --background: #f8fafc;
   --foreground: #171717;
+}
+
+:root[data-mantine-color-scheme="dark"] {
+  --background: #020617;
+  --foreground: #f1f5f9;
 }
 
 @theme inline {
@@ -12,15 +19,52 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root[data-mantine-color-scheme="dark"] .bg-white {
+  background-color: #0f172a;
+}
+
+:root[data-mantine-color-scheme="dark"] .bg-slate-50 {
+  background-color: #1e293b;
+}
+
+:root[data-mantine-color-scheme="dark"] .bg-slate-100 {
+  background-color: #334155;
+}
+
+:root[data-mantine-color-scheme="dark"] .border-slate-100,
+:root[data-mantine-color-scheme="dark"] .border-slate-200,
+:root[data-mantine-color-scheme="dark"] .divide-slate-100,
+:root[data-mantine-color-scheme="dark"] .divide-slate-200 {
+  border-color: #334155;
+}
+
+:root[data-mantine-color-scheme="dark"] .text-slate-900,
+:root[data-mantine-color-scheme="dark"] .text-slate-800 {
+  color: #f1f5f9;
+}
+
+:root[data-mantine-color-scheme="dark"] .text-slate-700,
+:root[data-mantine-color-scheme="dark"] .text-slate-600 {
+  color: #cbd5e1;
+}
+
+:root[data-mantine-color-scheme="dark"] .text-slate-500,
+:root[data-mantine-color-scheme="dark"] .text-slate-400 {
+  color: #94a3b8;
+}
+
+:root[data-mantine-color-scheme="dark"] .hover\:bg-slate-50:hover,
+:root[data-mantine-color-scheme="dark"] .hover\:bg-slate-50\/80:hover,
+:root[data-mantine-color-scheme="dark"] .hover\:bg-slate-100:hover {
+  background-color: #334155;
+}
+
+:root[data-mantine-color-scheme="dark"] .focus\:bg-white:focus {
+  background-color: #0f172a;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }

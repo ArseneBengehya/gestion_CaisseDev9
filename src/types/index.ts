@@ -1,24 +1,32 @@
 // src/types/index.ts
 
 export type Role = 'ADMIN' | 'MEMBRE' | 'GESTIONNAIRE';
+export type StatutCotisation = 'A jour' | 'Retard';
 
 // 1. Structure d'un Membre
 export interface Membre {
   id: string;
   nom: string;
   prenom: string;
-  email: string;
+  nomComplet: string; // Pour les affichages rapides
+  email?: string;
   telephone: string;
   avatarUrl?: string;
-  dateAdhesion: string; // Format ISO: 'YYYY-MM-DD'
+  dateAdhesion?: string; // Format ISO: 'YYYY-MM-DD'
   statut: 'ACTIF' | 'INACTIF';
+  statutCotisation: StatutCotisation;
+  montantTotalCotise: number;
+  detteActuelle: number;
+  moisPayes: string[];
+  avancesMoisFuturs: number;
+  createdAt?: string;
 }
 
 // 2. Structure d'une Contribution (Cotisation)
 export interface Contribution {
   id: string;
   membreId: string;
-  membreNomComplet?: string; // Utile pour l'affichage rapide dans les tableaux
+  membreNomComplet?: string;
   montantTotal: number;
   nombreMoisPayes: number;
   moisCouverts: string[]; // Exemple: ['2026-09', '2026-10']
@@ -60,4 +68,17 @@ export interface RegleCaisse {
   penaliteRetardActive: boolean;
   montantPenalite: number;
   frequenceRappelJours: number; // Ex: Tous les 30 jours
+}
+
+// 6. Structure d'un Emprunt
+export interface Emprunt {
+  id: string;
+  membreId: string;
+  nomMembre: string;
+  montantEmprunte: number;
+  tauxInteret: number; // En pourcentage, ex: 5%
+  montantTotalARembourser: number; // Montant + Intérêt calculé
+  dateEmprunt: string;
+  dateEcheance: string;
+  statut: 'En cours' | 'Remboursé' | 'En retard';
 }
