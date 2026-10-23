@@ -1,11 +1,9 @@
 'use client';
 
 import React from 'react';
-// import Modal from '@/components/ui/Modal';
-// import { Membre } from '@/types';
-import { Mail, Phone, Calendar } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { Membre } from '@/src/types';
+import { User, Phone, Mail, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
 
 interface ViewMembreModalProps {
   isOpen: boolean;
@@ -21,53 +19,64 @@ export default function ViewMembreModal({
   if (!membre) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Détails du Membre" maxWidth="md">
-      <div className="space-y-4">
-        {/* En-tête avec Avatar et Statut */}
-        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-bold text-lg flex items-center justify-center">
-            {membre.prenom[0]}{membre.nom[0]}
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Profil du Membre"
+      maxWidth="md"
+    >
+      <div className="space-y-6">
+        {/* En-tête profil */}
+        <div className="flex items-center gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/50">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white shadow-md">
+            {(membre.nomComplet || membre.nom || 'M').charAt(0).toUpperCase()}
           </div>
           <div>
-            <h4 className="text-lg font-bold text-slate-800">
-              {membre.prenom} {membre.nom}
-            </h4>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+              {membre.nomComplet || `${membre.prenom} ${membre.nom}`}
+            </h3>
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              className={`inline-flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                 membre.statut === 'ACTIF'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-rose-100 text-rose-800'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
+                  : 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
               }`}
             >
-              {membre.statut}
+              {membre.statut === 'ACTIF' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+              {membre.statut || 'ACTIF'}
             </span>
           </div>
         </div>
 
-        {/* Détails du Membre */}
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center gap-3 text-sm text-slate-600">
-            <Mail size={18} className="text-slate-400" />
-            <span>{membre.email}</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-slate-600">
+        {/* Coordonnées */}
+        <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Coordonnées
+          </h4>
+
+          <div className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
             <Phone size={18} className="text-slate-400" />
-            <span>{membre.telephone}</span>
+            <span>{membre.telephone || 'Non renseigné'}</span>
           </div>
-          <div className="flex items-center gap-3 text-sm text-slate-600">
-            <Calendar size={18} className="text-slate-400" />
-            <span>
-              Membre depuis le : <strong>{membre.dateAdhesion}</strong>
-            </span>
+
+          <div className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <Mail size={18} className="text-slate-400" />
+            <span>{membre.email || 'Non renseigné'}</span>
           </div>
+
+          {membre.createdAt && (
+            <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+              <Calendar size={18} className="text-slate-400" />
+              <span>Membre depuis le {new Date(membre.createdAt).toLocaleDateString('fr-FR')}</span>
+            </div>
+          )}
         </div>
 
-        {/* Pied du Modal */}
-        <div className="pt-4 flex justify-end border-t border-slate-100">
+        <div className="flex justify-end pt-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 rounded-lg transition-colors"
+            className="rounded-xl border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Fermer
           </button>
