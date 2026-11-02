@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Roboto_Mono } from "next/font/google";
 import "@mantine/core/styles.css"; // Importation des styles Mantine
-// import { ColorSchemeScript, MantineProvider } from "@mantine/core";
-import "./globals.css";
+import "./globals.css"; // Importation des styles globaux
 import { ColorSchemeScript, MantineProvider } from "@mantine/core";
+import { NotificationProvider } from "../context/NotificationContext";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const interSans = Inter({
+  variable: "--font-inter-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const robotoMono = Roboto_Mono({
+  variable: "--font-roboto-mono",
   subsets: ["latin"],
 });
 
@@ -25,15 +25,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="fr"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${interSans.variable} ${robotoMono.variable} h-full antialiased`}
     >
       <head>
-        {/* Prévient le clignotement blanc lors du chargement en mode sombre */}
+        {/* Prévient le clignotement lors du chargement en mode sombre */}
         <ColorSchemeScript defaultColorScheme="auto" />
       </head>
       <body className="min-h-full flex flex-col">
         <MantineProvider defaultColorScheme="auto">
-          {children}
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
         </MantineProvider>
       </body>
     </html>

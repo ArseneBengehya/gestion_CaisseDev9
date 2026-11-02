@@ -11,7 +11,10 @@ export interface Membre {
   nomComplet: string; // Pour les affichages rapides
   email?: string;
   telephone: string;
-  avatarUrl?: string;
+  avatarUrl?: string; // Ancien nom éventuellement présent dans les documents existants
+  photoUrl?: string; // URL de la photo stockée dans Firebase Storage
+  role?: Role;
+  motDePasse?: string; // Conservé pour compatibilité avec le schéma actuel
   dateAdhesion?: string; // Format ISO: 'YYYY-MM-DD'
   statut: 'ACTIF' | 'INACTIF';
   statutCotisation: StatutCotisation;

@@ -45,24 +45,24 @@ export default function Modal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-[3px] animate-fadeIn sm:p-4">
       <div
-        className={`bg-white rounded-xl shadow-2xl flex flex-col transition-all duration-300 ${
+        className={`flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/10 transition-all duration-300 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/30 ${
           isFullScreen
             ? 'w-full h-full rounded-none max-w-none max-h-none'
             : `w-full ${maxWidthClasses[maxWidth]} max-h-[90vh]`
         }`}
       >
         {/* Header du Modal */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800 sm:px-6">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 sm:text-lg">{title}</h3>
           
           <div className="flex items-center gap-2">
             {/* Bouton Plein Écran (utile pour l'historique des contributions) */}
             {setIsFullScreen && (
               <button
                 onClick={() => setIsFullScreen(!isFullScreen)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                 title={isFullScreen ? "Réduire" : "Plein écran"}
               >
                 {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -72,7 +72,7 @@ export default function Modal({
             {/* Bouton Fermer */}
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             >
               <X size={20} />
             </button>
@@ -80,7 +80,7 @@ export default function Modal({
         </div>
 
         {/* Corps du Modal (Scrollable) */}
-        <div className="p-6 overflow-y-auto flex-1">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 dark:text-slate-100 sm:p-6">{children}</div>
       </div>
     </div>
   );

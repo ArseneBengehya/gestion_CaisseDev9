@@ -3,7 +3,7 @@
 import React from 'react';
 import Modal from '../ui/Modal';
 import { Membre } from '@/src/types';
-import { User, Phone, Mail, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
+import { Phone, Mail, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
 
 interface ViewMembreModalProps {
   isOpen: boolean;
@@ -18,6 +18,8 @@ export default function ViewMembreModal({
 }: ViewMembreModalProps) {
   if (!membre) return null;
 
+  const photoUrl = membre.photoUrl || membre.avatarUrl;
+
   return (
     <Modal
       isOpen={isOpen}
@@ -27,10 +29,18 @@ export default function ViewMembreModal({
     >
       <div className="space-y-6">
         {/* En-tête profil */}
-        <div className="flex items-center gap-4 rounded-xl bg-slate-50 p-4 dark:bg-slate-800/50">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-xl font-bold text-white shadow-md">
-            {(membre.nomComplet || membre.nom || 'M').charAt(0).toUpperCase()}
-          </div>
+        <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt={`Photo de ${membre.nomComplet || 'ce membre'}`}
+              className="h-16 w-16 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700"
+            />
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xl font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
+              {(membre.nomComplet || membre.nom || 'M').charAt(0).toUpperCase()}
+            </div>
+          )}
           <div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">
               {membre.nomComplet || `${membre.prenom} ${membre.nom}`}
