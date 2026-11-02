@@ -18,7 +18,8 @@ export default function ThemeToggle() {
     <button
       onClick={toggleColorScheme}
       type="button"
-      className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-amber-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+      aria-label={computedColorScheme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
       title={computedColorScheme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
     >
       {computedColorScheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}

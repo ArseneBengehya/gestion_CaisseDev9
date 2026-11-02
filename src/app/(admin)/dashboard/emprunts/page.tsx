@@ -6,6 +6,7 @@ import { Emprunt, Membre } from '@/src/types';
 import DataTable, { Column } from '@/src/components/ui/DataTable';
 import AddEmpruntModal from '@/src/components/modals/AddEmpruntModal';
 import EditEmpruntModal from '@/src/components/modals/EditEmpruntModal';
+import Toast from '@/src/components/ui/Toast';
 
 // Import Firestore
 import {
@@ -26,6 +27,19 @@ export default function EmpruntsPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedEmprunt, setSelectedEmprunt] = useState<Emprunt | null>(null);
 
+  // État Toast pour les notifications
+  const [toast, setToast] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  };
+
   // 1. ÉCOUTER LES MEMBRES DEPUIS FIRESTORE
   useEffect(() => {
     const unsubMembres = onSnapshot(collection(db, 'membres'), (snapshot) => {
@@ -37,6 +51,8 @@ export default function EmpruntsPage() {
           prenom: data.prenom || '',
           nomComplet: data.nomComplet || `${data.prenom || ''} ${data.nom || ''}`.trim(),
           telephone: data.telephone || '',
+          photoUrl: data.photoUrl || data.avatarUrl || '',
+          avatarUrl: data.avatarUrl || '',
           statut: data.statut || 'ACTIF',
         } as Membre;
       });
@@ -98,10 +114,11 @@ export default function EmpruntsPage() {
         statut: 'En cours',
       });
 
-      alert("Emprunt enregistré avec succès dans Firestore !");
+      showToast('success', "Emprunt enregistré avec succès dans Firestore !");
+      setIsAddOpen(false);
     } catch (error) {
       console.error("Erreur lors de l'ajout de l'emprunt :", error);
-      alert("Erreur lors de l'enregistrement de l'emprunt.");
+      showToast('error', "Erreur lors de l'enregistrement de l'emprunt.");
     }
   };
 
@@ -115,24 +132,23 @@ export default function EmpruntsPage() {
         montantTotalARembourser: empruntModifie.montantTotalARembourser,
         dateEcheance: empruntModifie.dateEcheance,
       });
-      alert("Emprunt mis à jour avec succès !");
+      showToast('success', "Emprunt mis à jour avec succès !");
+      setIsEditOpen(false);
     } catch (error) {
       console.error("Erreur lors de la modification de l'emprunt :", error);
-      alert("Erreur lors de la mise à jour.");
+      showToast('error', "Erreur lors de la mise à jour.");
     }
   };
 
   // 5. CLÔTURER / MARQUER COMME REMBOURSÉ
   const handleMarquerRembourse = async (id: string) => {
-    if (confirm("Voulez-vous vraiment marquer cet emprunt comme remboursé (clôturé) ?")) {
-      try {
-        const empruntRef = doc(db, 'emprunts', id);
-        await updateDoc(empruntRef, { statut: 'Remboursé' });
-        alert("Emprunt clôturé avec succès !");
-      } catch (error) {
-        console.error("Erreur lors de la clôture de l'emprunt :", error);
-        alert("Erreur lors de la mise à jour du statut.");
-      }
+    try {
+      const empruntRef = doc(db, 'emprunts', id);
+      await updateDoc(empruntRef, { statut: 'Remboursé' });
+      showToast('success', "Emprunt clôturé avec succès !");
+    } catch (error) {
+      console.error("Erreur lors de la clôture de l'emprunt :", error);
+      showToast('error', "Erreur lors de la mise à jour du statut.");
     }
   };
 
@@ -144,17 +160,30 @@ export default function EmpruntsPage() {
   const columns: Column<Emprunt>[] = [
     {
       header: 'Membre',
-      accessor: (item) => (
-        <div>
-          <p className="font-bold text-slate-900 dark:text-white">{item.nomMembre}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Emprunté le : {item.dateEmprunt}</p>
-        </div>
-      ),
+      accessor: (item) => {
+        const membreLie = membres.find((membre) => membre.id === item.membreId);
+        const photoUrl = membreLie?.photoUrl || membreLie?.avatarUrl;
+        return (
+          <div className="flex items-center gap-3">
+            {photoUrl ? (
+              <img src={photoUrl} alt={`Photo de ${item.nomMembre}`} className="h-9 w-9 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700" />
+            ) : (
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {(item.nomMembre || 'M').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="font-bold text-slate-900 dark:text-white">{item.nomMembre}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Emprunté le : {item.dateEmprunt}</p>
+            </div>
+          </div>
+        );
+      },
     },
     {
       header: 'Montant Prêté',
       accessor: (item) => (
-        <span className="font-semibold text-blue-600 dark:text-blue-400">
+        <span className="font-semibold text-slate-900 dark:text-white">
           {item.montantEmprunte.toLocaleString()} FC
         </span>
       ),
@@ -178,9 +207,9 @@ export default function EmpruntsPage() {
       header: 'Statut',
       accessor: (item) => {
         const styles: Record<string, string> = {
-          'En cours': 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
-          Remboursé: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
-          'En retard': 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300',
+          'En cours': 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+          Remboursé: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+          'En retard': 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
         };
         return (
           <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${styles[item.statut] || 'bg-slate-100 text-slate-800'}`}>
@@ -197,14 +226,14 @@ export default function EmpruntsPage() {
             <>
               <button
                 onClick={() => openEditModal(item)}
-                className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 rounded-lg transition-colors"
+                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 title="Modifier l'emprunt"
               >
                 <Edit size={14} />
               </button>
               <button
                 onClick={() => handleMarquerRembourse(item.id)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 <CheckCircle size={14} /> Clôturer
               </button>
@@ -220,7 +249,16 @@ export default function EmpruntsPage() {
     .reduce((acc, curr) => acc + curr.montantTotalARembourser, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {/* Toast de notification */}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Gestion des Emprunts & Crédits</h2>
@@ -230,43 +268,43 @@ export default function EmpruntsPage() {
         </div>
         <button
           onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
         >
           <PlusCircle size={18} />
           Octroyer un Emprunt
         </button>
       </div>
 
-      {/* Cartes KPI */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Créances en cours</p>
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-              {totalEncours.toLocaleString()} FC
-            </p>
+      {/* Cartes KPI redessinées (plus compactes et épurées) */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Créances en cours</span>
+            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <HandCoins size={18} />
+            </div>
           </div>
-          <div className="p-3 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-lg">
-            <HandCoins size={22} />
-          </div>
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-slate-900 dark:text-white truncate">
+            {totalEncours.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
+          </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Total Emprunts Actifs</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-              {emprunts.filter((e) => e.statut === 'En cours').length} Prêt(s)
-            </p>
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Emprunts Actifs</span>
+            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <Clock size={18} />
+            </div>
           </div>
-          <div className="p-3 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-lg">
-            <Clock size={22} />
-          </div>
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-slate-900 dark:text-white truncate">
+            {emprunts.filter((e) => e.statut === 'En cours').length} <span className="text-xs font-normal text-slate-500">Prêt(s)</span>
+          </p>
         </div>
       </div>
 
       {/* Tableau des emprunts */}
       {isLoading ? (
-        <div className="p-8 text-center text-slate-500">Chargement des emprunts depuis Firestore...</div>
+        <div className="p-8 text-center text-slate-500">Chargement des emprunts...</div>
       ) : (
         <DataTable
           data={emprunts}
