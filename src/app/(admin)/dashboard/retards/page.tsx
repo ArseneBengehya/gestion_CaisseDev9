@@ -247,7 +247,7 @@ export default function RetardsPage() {
               <ShieldAlert size={18} />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-rose-600 dark:text-rose-400 truncate">
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums truncate">
             {totalDettes.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
           </p>
         </div>
@@ -304,7 +304,7 @@ export default function RetardsPage() {
                       <span className="text-base font-bold text-slate-900 dark:text-white">
                         {membre.nomComplet}
                       </span>
-                      <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                      <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold dark:bg-rose-950/60 dark:text-rose-300">
                         {membre.moisEnRetard} mois de retard
                       </span>
                     </div>
@@ -318,7 +318,7 @@ export default function RetardsPage() {
                       <span>•</span>
                       <span>
                         Pénalités :{' '}
-                        <strong className="text-rose-600 dark:text-rose-400">
+                        <strong className="font-bold">
                           {membre.penalite.toLocaleString()} FC
                         </strong>
                       </span>
@@ -329,7 +329,7 @@ export default function RetardsPage() {
                 <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
                   <div className="text-right">
                     <p className="text-xs text-slate-400 uppercase font-semibold">Total À Payer</p>
-                    <p className="text-lg font-extrabold text-rose-600 dark:text-rose-400">
+                    <p className="text-lg font-extrabold">
                       {membre.totalDuh.toLocaleString()} FC
                     </p>
                   </div>
@@ -339,7 +339,7 @@ export default function RetardsPage() {
                     onClick={() => handleSendAutomaticRelance(membre)}
                     className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl shadow-sm transition-all ${
                       sentSuccessId === membre.id
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 '
                         : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
                     }`}
                   >

@@ -215,7 +215,7 @@ export default function ContributionsPage() {
     {
       header: 'Total Cotisé',
       accessor: (item) => (
-        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+        <span className="font-semibold">
           {item.montantTotalCotise.toLocaleString()} FC
         </span>
       ),
@@ -223,7 +223,7 @@ export default function ContributionsPage() {
     {
       header: 'Dette Actuelle',
       accessor: (item) => (
-        <span className={`font-semibold ${item.detteActuelle > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}`}>
+        <span className={`font-semibold ${item.detteActuelle > 0 }`}>
           {item.detteActuelle > 0 ? `${item.detteActuelle.toLocaleString()} FC` : 'Aucune'}
         </span>
       ),
@@ -277,7 +277,7 @@ export default function ContributionsPage() {
               <PiggyBank size={18} />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400 truncate">
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-numstruncate">
             {totalCotisations.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
           </p>
         </div>
@@ -289,7 +289,7 @@ export default function ContributionsPage() {
               <AlertCircle size={18} />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-rose-600 dark:text-rose-400 truncate">
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums  truncate">
             {totalDettes.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
           </p>
         </div>
