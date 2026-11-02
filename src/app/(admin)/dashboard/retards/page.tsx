@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Send, PhoneCall, ShieldAlert, Loader2, CheckCircle2 } from 'lucide-react';
 import { Membre } from '@/src/types';
+import Toast from '@/src/components/ui/Toast';
 
 // Import Firestore
 import { collection, onSnapshot, doc } from 'firebase/firestore';
@@ -20,6 +21,7 @@ interface MembreEnRetard {
   id: string;
   nomComplet: string;
   telephone: string;
+  photoUrl?: string;
   moisEnRetard: number;
   montantCotisationDuh: number;
   penalite: number;
@@ -35,6 +37,19 @@ export default function RetardsPage() {
   
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sentSuccessId, setSentSuccessId] = useState<string | null>(null);
+
+  // État Toast pour les notifications
+  const [toast, setToast] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  };
 
   const [caisseConfig, setCaisseConfig] = useState({
     dateDebutCaisse: '2025-01-01',
@@ -56,8 +71,7 @@ export default function RetardsPage() {
     return () => unsubConfig();
   }, []);
 
-  // 2. Écouter la liste des membres (Transtypage direct pour éviter les erreurs de types strictes)
-// 2. Écouter la liste des membres (corrigé avec 'as any')
+  // 2. Écouter la liste des membres
   useEffect(() => {
     const unsubMembres = onSnapshot(collection(db, 'membres'), (snapshotMembres) => {
       const list = snapshotMembres.docs.map((d) => {
@@ -69,6 +83,8 @@ export default function RetardsPage() {
           nomComplet: data.nomComplet || `${data.prenom || ''} ${data.nom || ''}`.trim(),
           telephone: data.telephone || '',
           email: data.email || '',
+          photoUrl: data.photoUrl || data.avatarUrl || '',
+          avatarUrl: data.avatarUrl || '',
           statut: data.statut || 'ACTIF',
           dateAdhesion: data.createdAt || new Date().toISOString().split('T')[0],
           detteActuelle: 0,
@@ -145,6 +161,7 @@ export default function RetardsPage() {
           id: membre.id,
           nomComplet: membre.nomComplet || `${membre.prenom || ''} ${membre.nom || ''}`.trim(),
           telephone: membre.telephone || '',
+          photoUrl: membre.photoUrl || membre.avatarUrl || '',
           moisEnRetard,
           montantCotisationDuh,
           penalite,
@@ -157,10 +174,10 @@ export default function RetardsPage() {
     setMembresRetard(resultats);
   }, [membres, contributions, caisseConfig]);
 
-  // Appeler l'API de relance automatique
+  // Appeler l'API de relance automatique (Utilisation du Toast)
   const handleSendAutomaticRelance = async (membre: MembreEnRetard) => {
     if (!membre.telephone) {
-      alert("Ce membre n'a pas de numéro de téléphone enregistré.");
+      showToast('error', "Ce membre n'a pas de numéro de téléphone enregistré.");
       return;
     }
 
@@ -179,14 +196,15 @@ export default function RetardsPage() {
 
       if (response.ok) {
         setSentSuccessId(membre.id);
+        showToast('success', `Relance WhatsApp envoyée avec succès à ${membre.nomComplet} !`);
         setTimeout(() => setSentSuccessId(null), 4000);
       } else {
         const messageErreur = resData.error || "Impossible d'envoyer la relance";
-        alert(`Erreur d'envoi : ${messageErreur}`);
+        showToast('error', `Erreur d'envoi : ${messageErreur}`);
       }
     } catch (error) {
       console.error("Erreur lors de la relance :", error);
-      alert("Erreur réseau lors de l'envoi de la relance.");
+      showToast('error', "Erreur réseau lors de l'envoi de la relance.");
     } finally {
       setSendingId(null);
     }
@@ -195,7 +213,16 @@ export default function RetardsPage() {
   const totalDettes = membresRetard.reduce((acc, curr) => acc + curr.totalDuh, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {/* Toast de notification */}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
+
       {/* En-tête */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -209,44 +236,44 @@ export default function RetardsPage() {
         </div>
       </div>
 
-      {/* Cartes KPI */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
+      {/* Cartes KPI redessinées (épurées et sobres) */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Créances à Recouvrer
-            </p>
-            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-              {totalDettes.toLocaleString()} FC
-            </p>
+            </span>
+            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <ShieldAlert size={18} />
+            </div>
           </div>
-          <div className="p-3 bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 rounded-lg">
-            <ShieldAlert size={24} />
-          </div>
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums truncate">
+            {totalDettes.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
+          </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-xl flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Membres en Retard
-            </p>
-            <p className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
-              {membresRetard.length} Membre(s)
-            </p>
+            </span>
+            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <AlertTriangle size={18} />
+            </div>
           </div>
-          <div className="p-3 bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 rounded-lg">
-            <AlertTriangle size={24} />
-          </div>
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-slate-900 dark:text-white truncate">
+            {membresRetard.length} <span className="text-xs font-normal text-slate-500">Membre(s)</span>
+          </p>
         </div>
       </div>
 
       {/* Liste des membres en retard */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-800 dark:text-white">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
             Relances Automatiques WhatsApp API
           </h3>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-slate-500 dark:text-slate-400">
             Envoi sécurisé via le serveur
           </span>
         </div>
@@ -255,7 +282,7 @@ export default function RetardsPage() {
           <div className="p-8 text-center text-slate-500">Analyse des retards en cours...</div>
         ) : membresRetard.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
-            Aucun membre en retard pour le moment. Tout le monde est à jour ! 🎉
+            Aucun membre en retard pour le moment. Tout le monde est à jour !
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -264,36 +291,45 @@ export default function RetardsPage() {
                 key={membre.id}
                 className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
               >
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 dark:text-white text-base">
-                      {membre.nomComplet}
-                    </span>
-                    <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300">
-                      {membre.moisEnRetard} mois de retard
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <PhoneCall size={12} /> {membre.telephone || 'Aucun numéro'}
-                  </p>
-                  <div className="text-xs text-slate-600 dark:text-slate-300 gap-3 pt-0.5 flex flex-wrap">
-                    <span>
-                      Cotisations : <strong>{membre.montantCotisationDuh.toLocaleString()} FC</strong>
-                    </span>
-                    <span>•</span>
-                    <span>
-                      Pénalités :{' '}
-                      <strong className="text-amber-600 dark:text-amber-400">
-                        {membre.penalite.toLocaleString()} FC
-                      </strong>
-                    </span>
+                <div className="flex min-w-0 items-start gap-3">
+                  {membre.photoUrl ? (
+                    <img src={membre.photoUrl} alt={`Photo de ${membre.nomComplet}`} className="mt-0.5 h-10 w-10 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700" />
+                  ) : (
+                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {(membre.nomComplet || 'M').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-base font-bold text-slate-900 dark:text-white">
+                        {membre.nomComplet}
+                      </span>
+                      <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold dark:bg-rose-950/60 dark:text-rose-300">
+                        {membre.moisEnRetard} mois de retard
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <PhoneCall size={12} /> {membre.telephone || 'Aucun numéro'}
+                    </p>
+                    <div className="text-xs text-slate-600 dark:text-slate-300 gap-3 pt-0.5 flex flex-wrap">
+                      <span>
+                        Cotisations : <strong>{membre.montantCotisationDuh.toLocaleString()} FC</strong>
+                      </span>
+                      <span>•</span>
+                      <span>
+                        Pénalités :{' '}
+                        <strong className="font-bold">
+                          {membre.penalite.toLocaleString()} FC
+                        </strong>
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-100 dark:border-slate-800">
                   <div className="text-right">
                     <p className="text-xs text-slate-400 uppercase font-semibold">Total À Payer</p>
-                    <p className="text-lg font-extrabold text-rose-600 dark:text-rose-400">
+                    <p className="text-lg font-extrabold">
                       {membre.totalDuh.toLocaleString()} FC
                     </p>
                   </div>
@@ -303,8 +339,8 @@ export default function RetardsPage() {
                     onClick={() => handleSendAutomaticRelance(membre)}
                     className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl shadow-sm transition-all ${
                       sentSuccessId === membre.id
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 '
+                        : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
                     }`}
                   >
                     {sendingId === membre.id ? (

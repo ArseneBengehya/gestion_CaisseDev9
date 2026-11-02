@@ -141,15 +141,15 @@ export default function AdminDashboardPage() {
       {/* En-tête du Dashboard */}
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-blue-700 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:ring-blue-900">
+          <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-600 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-slate-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-slate-900 dark:bg-white" />
             </span>
-            Tableau de bord (Temps réel)
+            Tableau de bord 
           </span>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-            Suivez les mouvements et la situation globale de la Caisse Dev9.
+            Suivez les mouvements et la situation globale de la Caisse
           </p>
         </div>
       </div>
@@ -157,72 +157,72 @@ export default function AdminDashboardPage() {
       {/* Cartes KPI */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {/* Solde Total */}
-        <div className="group relative min-w-0 overflow-hidden rounded-xl bg-blue-600 p-3.5 text-white shadow-md shadow-blue-700/20 transition-all hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-900 dark:shadow-none dark:ring-1 dark:ring-blue-400/20">
-          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10 blur-2xl" />
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:shadow-none">
+          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="relative flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-blue-100">Solde en caisse</span>
-            <div className="shrink-0 rounded-lg bg-white/15 p-1.5 ring-1 ring-white/20">
+            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Solde en caisse</span>
+            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
               <Wallet size={15} />
             </div>
           </div>
           <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl">
-            {soldeActuel.toLocaleString()} <span className="text-xs font-medium text-blue-100">FC</span>
+            {soldeActuel.toLocaleString()} <span className="text-xs font-medium text-slate-500 dark:text-slate-400">FC</span>
           </p>
-          <span className="relative mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-200">
+          <span className="relative mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
             <ArrowUpRight size={12} /> Calcul en direct
           </span>
         </div>
 
         {/* Total Cotisations */}
-        <div className="group relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900">
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-400 to-emerald-600" />
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total cotisations</span>
-            <div className="shrink-0 rounded-lg bg-emerald-50 p-1.5 text-emerald-700 ring-1 ring-inset ring-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-900">
+            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
               <TrendingUp size={15} />
             </div>
           </div>
-          <p className="mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight text-emerald-700 xl:text-xl dark:text-emerald-400">
+          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-emerald-600 dark:text-emerald-400">
             +{totalContributions.toLocaleString()} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">FC</span>
           </p>
           <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Cumul des entrées</p>
         </div>
 
         {/* Total Dépenses */}
-        <div className="group relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900">
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-rose-400 to-rose-600" />
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total dépenses</span>
-            <div className="shrink-0 rounded-lg bg-rose-50 p-1.5 text-rose-700 ring-1 ring-inset ring-rose-100 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-900">
+            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
               <TrendingDown size={15} />
             </div>
           </div>
-          <p className="mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight text-rose-700 xl:text-xl dark:text-rose-400">
+          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-rose-600 dark:text-rose-400">
             -{totalDepenses.toLocaleString()} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">FC</span>
           </p>
           <div className="mt-1.5 flex items-center gap-2">
             <div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className="h-full rounded-full bg-gradient-to-r from-rose-400 to-rose-600" style={{ width: `${tauxDepenses}%` }} />
+              <div className="h-full rounded-full bg-rose-600 dark:bg-rose-500" style={{ width: `${tauxDepenses}%` }} />
             </div>
             <span className="text-[11px] text-slate-500 dark:text-slate-400">{tauxDepenses}%</span>
           </div>
         </div>
 
         {/* Retards de Paiement */}
-        <div className="group relative min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900">
-          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-amber-400 to-amber-600" />
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Membres en retard</span>
-            <div className="shrink-0 rounded-lg bg-amber-50 p-1.5 text-amber-700 ring-1 ring-inset ring-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-900">
+            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
               <AlertTriangle size={15} />
             </div>
           </div>
-          <p className="mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight text-amber-700 xl:text-xl dark:text-amber-400">
+          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-rose-600 dark:text-rose-400">
             {membresEnRetard} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">/ {membresActifs}</span>
           </p>
           <Link
             href="/dashboard/retards"
-            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 transition-colors hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white"
           >
             Voir les retards <ArrowRight size={12} aria-hidden="true" className="transition-transform group-hover:translate-x-0.5" />
           </Link>
@@ -230,10 +230,10 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Section Activités Récentes */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-slate-700">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
-            <span className="h-5 w-1 rounded-full bg-gradient-to-b from-blue-500 to-emerald-500" />
+            <span className="h-5 w-1 rounded-full bg-slate-900 dark:bg-white" />
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Derniers mouvements de caisse</h3>
           </div>
           <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -246,20 +246,20 @@ export default function AdminDashboardPage() {
         ) : activitesRecentes.length === 0 ? (
           <div className="p-8 text-center text-slate-500">Aucun mouvement enregistré pour le moment.</div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {activitesRecentes.map((act) => {
               const estEntree = act.type === 'contribution';
               return (
                 <div
                   key={act.id}
-                  className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 dark:hover:bg-slate-800/50"
+                  className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 dark:hover:bg-slate-800/40"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div
                       className={`shrink-0 rounded-xl p-2.5 ring-1 ring-inset ${
                         estEntree
-                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:ring-emerald-900'
-                          : 'bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-950/60 dark:text-rose-300 dark:ring-rose-900'
+                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/50'
+                          : 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/50'
                       }`}
                     >
                       {estEntree ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
@@ -270,8 +270,8 @@ export default function AdminDashboardPage() {
                         <span
                           className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline-block ${
                             estEntree
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
                           }`}
                         >
                           {estEntree ? 'Entrée' : 'Sortie'}
