@@ -167,7 +167,7 @@ export default function DepensesPage() {
     {
       header: 'Montant',
       accessor: (item) => (
-        <span className="font-semibold text-rose-600 dark:text-rose-400">
+        <span className="font-semibold ">
           -{item.montant.toLocaleString()} FC
         </span>
       ),
@@ -219,7 +219,7 @@ export default function DepensesPage() {
               <TrendingDown size={18} />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-rose-600 dark:text-rose-400 truncate">
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums truncate">
             -{totalDepenses.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
           </p>
         </div>
