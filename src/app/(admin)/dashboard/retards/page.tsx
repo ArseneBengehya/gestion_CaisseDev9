@@ -356,7 +356,7 @@ export default function RetardsPage() {
                     ) : (
                       <>
                         <Send size={14} />
-                        Relance Automatique
+                        signaler retard
                       </>
                     )}
                   </button>

@@ -235,7 +235,7 @@ export default function ReglesEtParametresPage() {
               activeTab === 'regles' ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
             }`}
           >
-            <BookOpen size={15} /> Règles du Groupe
+            <BookOpen size={15} /> Règles
           </button>
           <button
             onClick={() => setActiveTab('parametres')}
@@ -243,7 +243,7 @@ export default function ReglesEtParametresPage() {
               activeTab === 'parametres' ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
             }`}
           >
-            <Settings size={15} /> Paramètres de la Caisse
+            <Settings size={15} /> Paramètres
           </button>
         </div>
       </div>
