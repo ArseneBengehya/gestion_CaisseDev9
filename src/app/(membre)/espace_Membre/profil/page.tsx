@@ -1,301 +1,166 @@
 "use client";
 
-import React, { useState } from "react";
-// Importation du Modal générique depuis le dossier ui
-import Modal from "../../../../components/ui/Modal";
+import React, { useEffect, useState } from "react";
 import {
   User,
   Mail,
   Phone,
-  ShieldCheck,
-  Edit,
-  Camera,
-  Trash2,
-  Lock,
-  Save,
+  Shield,
+  Calendar,
   CheckCircle2,
+  Clock,
+  Loader2,
+  Wallet,
 } from "lucide-react";
+import { auth } from "../../../../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { getMembreByUid } from "../../../../services/dbService";
+import { Membre } from "../../../../types";
 
 export default function ProfilPage() {
-  // 1. Les données du membre
-  const [membre, setMembre] = useState({
-    nomComplet: "Kambale Malikewa Michael",
-    email: "michael.kambale@dev9.org",
-    telephone: "+243 970 000 000",
-    statut: "Actif",
-    role: "Membre co-fondateur | Groupe Dev9",
-    dateAdhesion: "Janvier 2025",
-    photoUrl: null as string | null,
-  });
+  const [membre, setMembre] = useState<Membre | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 2. Les états pour gérer le Modal et les formulaires
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isFull, setIsFull] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-
-  // Formulaire temporaire dans le modal
-  const [formNom, setFormNom] = useState(membre.nomComplet);
-  const [formEmail, setFormEmail] = useState(membre.email);
-  const [formTel, setFormTel] = useState(membre.telephone);
-  const [ancienPassword, setAncienPassword] = useState("");
-  const [nouveauPassword, setNouveauPassword] = useState("");
-  const [tempPhoto, setTempPhoto] = useState<string | null>(membre.photoUrl);
-
-  // Gestion du changement de photo
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setTempPhoto(URL.createObjectURL(file));
-    }
-  };
-
-  // Enregistrement des modifications du modal
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Mettre à jour les infos du membre
-    setMembre({
-      ...membre,
-      nomComplet: formNom,
-      email: formEmail,
-      telephone: formTel,
-      photoUrl: tempPhoto,
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const dataMembre = await getMembreByUid(user.uid);
+        if (dataMembre) {
+          setMembre(dataMembre);
+        }
+      }
+      setIsLoading(false);
     });
 
-    // Fermer le modal et afficher le message de succès
-    setIsModalOpen(false);
-    setIsSuccess(true);
-    setTimeout(() => setIsSuccess(false), 4000);
-  };
+    return () => unsubscribe();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
+        <Loader2 size={32} className="animate-spin text-blue-600" />
+        <p className="text-xs font-semibold">Chargement des données de votre profil...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      {/* En-tête de la page */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Mon Profil</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Vos informations personnelles enregistrées au sein de la caisse.
-          </p>
-        </div>
-
-        {/* Bouton qui ouvre le Modal d'édition */}
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2"
-        >
-          <Edit size={15} /> Modifier mon profil
-        </button>
+    <div className="max-w-4xl space-y-8 pb-6">
+      {/* En-tête */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mon Profil</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          Gérez vos informations personnelles et consultez votre statut d'adhésion à la Caisse Dev9.
+        </p>
       </div>
 
-      {/* Alerte de succès */}
-      {isSuccess && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-semibold animate-fadeIn">
-          <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
-          <span>Vos informations ont été mises à jour avec succès !</span>
-        </div>
-      )}
-
-      {/* 💳 CARTE DE PROFIL ÉPURÉE (Lecture seule) */}
-      <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-sm space-y-8">
-        {/* Photo RONDE + Informations de base */}
-        <div className="flex flex-col sm:flex-row items-center gap-6 pb-6 border-b border-slate-100">
-          <div className="relative">
-            {membre.photoUrl ? (
-              <img
-                src={membre.photoUrl}
-                alt="Photo de profil"
-                className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 shadow-sm"
-              />
-            ) : (
-              <div className="w-24 h-24 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-3xl shadow-sm border-4 border-slate-100">
-                {membre.nomComplet.charAt(0)}
+      {/* Carte d'identité du membre */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-6 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-emerald-500 p-0.5 shadow-md">
+              <div className="h-full w-full bg-white dark:bg-slate-900 rounded-[14px] flex items-center justify-center font-black text-2xl text-blue-600 dark:text-blue-400">
+                {membre?.nomComplet ? membre.nomComplet.charAt(0).toUpperCase() : "M"}
               </div>
-            )}
-          </div>
-
-          <div className="text-center sm:text-left space-y-1.5">
-            <div className="flex items-center gap-3 justify-center sm:justify-start">
-              <h2 className="text-xl font-bold text-slate-900">{membre.nomComplet}</h2>
-              <span className="px-3 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                ● {membre.statut}
-              </span>
             </div>
-            <p className="text-xs text-slate-400 font-medium">{membre.role}</p>
-            <p className="text-[11px] text-slate-400">Membre depuis : {membre.dateAdhesion}</p>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {membre?.nomComplet || `${membre?.prenom || ''} ${membre?.nom || ''}`}
+              </h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300">
+                  <Shield size={12} /> {membre?.role || "MEMBRE"}
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300">
+                  <CheckCircle2 size={12} /> {membre?.statut || "ACTIF"}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Grille des informations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-          <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center gap-3.5">
-            <div className="p-2.5 bg-white text-slate-700 rounded-lg shadow-sm">
-              <User size={18} />
+        {/* Grille des informations personnelles */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
+            <div className="flex items-center gap-2 text-slate-400 font-medium">
+              <User size={14} />
+              <span>Nom complet</span>
             </div>
-            <div>
-              <p className="text-slate-400 font-medium">Nom complet</p>
-              <p className="font-bold text-slate-900 text-sm mt-0.5">{membre.nomComplet}</p>
-            </div>
+            <p className="font-bold text-slate-900 dark:text-white text-sm">
+              {membre?.nomComplet || `${membre?.prenom || ''} ${membre?.nom || ''}`}
+            </p>
           </div>
 
-          <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center gap-3.5">
-            <div className="p-2.5 bg-white text-slate-700 rounded-lg shadow-sm">
-              <Mail size={18} />
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
+            <div className="flex items-center gap-2 text-slate-400 font-medium">
+              <Phone size={14} />
+              <span>Numéro de téléphone</span>
             </div>
-            <div>
-              <p className="text-slate-400 font-medium">Adresse E-mail</p>
-              <p className="font-bold text-slate-900 text-sm mt-0.5">{membre.email}</p>
-            </div>
+            <p className="font-bold text-slate-900 dark:text-white text-sm">
+              {membre?.telephone || "Non renseigné"}
+            </p>
           </div>
 
-          <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center gap-3.5">
-            <div className="p-2.5 bg-white text-slate-700 rounded-lg shadow-sm">
-              <Phone size={18} />
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
+            <div className="flex items-center gap-2 text-slate-400 font-medium">
+              <Mail size={14} />
+              <span>Adresse Email</span>
             </div>
-            <div>
-              <p className="text-slate-400 font-medium">Numéro de téléphone</p>
-              <p className="font-bold text-slate-900 text-sm mt-0.5">{membre.telephone}</p>
-            </div>
+            <p className="font-bold text-slate-900 dark:text-white text-sm">
+              {membre?.email || "Non renseignée"}
+            </p>
           </div>
 
-          <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center gap-3.5">
-            <div className="p-2.5 bg-white text-slate-700 rounded-lg shadow-sm">
-              <ShieldCheck size={18} />
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
+            <div className="flex items-center gap-2 text-slate-400 font-medium">
+              <Calendar size={14} />
+              <span>Membre depuis</span>
             </div>
-            <div>
-              <p className="text-slate-400 font-medium">Statut du compte</p>
-              <p className="font-bold text-emerald-600 text-sm mt-0.5">Compte Vérifié & Conforme</p>
+            <p className="font-bold text-slate-900 dark:text-white text-sm">
+              {membre?.createdAt
+                ? new Date(membre.createdAt).toLocaleDateString("fr-FR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })
+                : "Date non spécifiée"}
+            </p>
+          </div>
+        </div>
+
+        {/* Récapitulatif Financier Personnel */}
+        <div className="border-t border-slate-100 dark:border-slate-800 pt-6 space-y-3">
+          <h3 className="font-bold text-slate-900 dark:text-white text-sm">Statut de vos cotisations</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-3.5 rounded-xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20">
+              <p className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+                <Wallet size={14} /> Total Cotisé
+              </p>
+              <p className="font-black text-emerald-900 dark:text-emerald-300 text-base mt-1">
+                {(membre?.montantTotalCotise || 0).toLocaleString()} FC
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+              <p className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1.5">
+                <CheckCircle2 size={14} /> Statut Cotisation
+              </p>
+              <p className="font-bold text-slate-900 dark:text-white text-sm mt-1">
+                {membre?.statutCotisation || "À jour"}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20">
+              <p className="text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1.5">
+                <Clock size={14} /> Solde Débiteurs / Dette
+              </p>
+              <p className="font-black text-amber-900 dark:text-amber-300 text-base mt-1">
+                {(membre?.detteActuelle || 0).toLocaleString()} FC
+              </p>
             </div>
           </div>
         </div>
       </div>
-
-      {/* 🪟 MODAL DE MODIFICATION DU PROFIL & SÉCURITÉ */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Modifier mes informations"
-        maxWidth="lg"
-        isFullScreen={isFull}
-        setIsFullScreen={setIsFull}
-      >
-        <form onSubmit={handleSave} className="space-y-6 text-xs">
-          {/* Photo ronde dans le modal */}
-          <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
-            {tempPhoto ? (
-              <img
-                src={tempPhoto}
-                alt="Aperçu"
-                className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xl">
-                {formNom.charAt(0)}
-              </div>
-            )}
-            <div className="space-y-1">
-              <label
-                htmlFor="photo-modal"
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer w-max"
-              >
-                <Camera size={14} /> Changer la photo
-              </label>
-              <input
-                type="file"
-                id="photo-modal"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
-              {tempPhoto && (
-                <button
-                  type="button"
-                  onClick={() => setTempPhoto(null)}
-                  className="text-rose-600 font-semibold text-[11px] hover:underline"
-                >
-                  Supprimer la photo
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Champs d'édition */}
-          <div className="space-y-4">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Nom complet</label>
-              <input
-                type="text"
-                value={formNom}
-                onChange={(e) => setFormNom(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">E-mail</label>
-                <input
-                  type="email"
-                  value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Téléphone</label>
-                <input
-                  type="tel"
-                  value={formTel}
-                  onChange={(e) => setFormTel(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Sécurité */}
-            <div className="pt-2 border-t border-slate-100 space-y-3">
-              <p className="font-bold text-slate-900 text-xs">Changer le mot de passe (optionnel)</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <input
-                  type="password"
-                  placeholder="Ancien mot de passe"
-                  value={ancienPassword}
-                  onChange={(e) => setAncienPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
-                />
-                <input
-                  type="password"
-                  placeholder="Nouveau mot de passe"
-                  value={nouveauPassword}
-                  onChange={(e) => setNouveauPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Boutons du Modal */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition-colors"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
-            >
-              <Save size={14} /> Enregistrer
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }

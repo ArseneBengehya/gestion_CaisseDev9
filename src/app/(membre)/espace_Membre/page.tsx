@@ -1,276 +1,280 @@
 "use client";
 
-import React, { useState } from "react";
-import Modal from "../../../components/ui/Modal";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  Landmark,
-  PiggyBank,
-  AlertCircle,
+  Wallet,
   TrendingUp,
-  Eye,
-  ShieldAlert,
-  Info,
-  Banknote,
-  Target,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUpRight,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Bell,
+  ShieldCheck,
 } from "lucide-react";
 
-export default function MonEspacePage() {
-  // Données de simulation pour le membre
-  const stats = {
-    caisseGenerale: "1 850 000 FC",
-    totalCotiseMembre: "125 000 FC",
-    montantImpaye: "10 000 FC",
-    moisImpayes: ["Mai 2026 (5000 FC)", "Juin 2026 (5000 FC)"],
-    montantAvance: "15 000 FC",
-    moisAvances: ["Novembre 2026 (5000 FC)", "Décembre 2026 (10000 FC - Soutien)"],
-  };
+// Importations Firebase et Services
+import { auth } from "../../../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { getMembreByUid, getContributionsByMembreId } from "../../../services/dbService";
+import { Membre, Contribution, NotificationMembre } from "../../../types";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "../../../lib/firebase";
 
-  // Gestion des modals
-  const [modalType, setModalType] = useState<"impayes" | "avances" | null>(null);
-  const [isFull, setIsFull] = useState(false);
+export default function EspaceMembreAccueil() {
+  const [membre, setMembre] = useState<Membre | null>(null);
+  const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [notifications, setNotifications] = useState<NotificationMembre[]>([]);
+  const [totalGeneralCaisse, setTotalGeneralCaisse] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // 1. Écouter le total général de la caisse en temps réel depuis les contributions globales
+    const unsubGlobalContribs = onSnapshot(collection(db, "contributions"), (snapshot) => {
+      let sommeTotale = 0;
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        sommeTotale += Number(data.montantTotal || data.montantVerse || 0);
+      });
+      setTotalGeneralCaisse(sommeTotale);
+    });
+
+    // 2. Authentification et données du membre connecté
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const dataMembre = await getMembreByUid(user.uid);
+        if (dataMembre) {
+          setMembre(dataMembre);
+
+          // Récupérer ses contributions personnelles
+          const listContribs = await getContributionsByMembreId(dataMembre.id);
+          setContributions(listContribs);
+
+          // Écouter ses notifications en temps réel
+          const notifsRef = collection(db, "notifications");
+          const qNotifs = query(notifsRef, where("membreId", "in", [dataMembre.id, "TOUS"]));
+          
+          const unsubscribeNotifs = onSnapshot(qNotifs, (snapshot) => {
+            const notifsList = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as NotificationMembre[];
+            notifsList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            setNotifications(notifsList);
+          });
+
+          setIsLoading(false);
+          return () => unsubscribeNotifs();
+        }
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      unsubGlobalContribs();
+      unsubscribeAuth();
+    };
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
+        <Loader2 size={36} className="animate-spin text-blue-600" />
+        <p className="text-xs font-semibold">Chargement de votre espace sécurisé...</p>
+      </div>
+    );
+  }
+
+  // 🧮 Calculs précis demandés
+  const totalCotisePersonnel = contributions.reduce((acc, curr) => acc + (Number(curr.montantTotal) || 0), 0);
+  
+  // Mois actuels payés vs attendus (basés sur le calendrier)
+  const moisActuelIndex = new Date().getMonth() + 1; // 1 à 12
+  const moisPayesList = membre?.moisPayes || [];
+  const nombreMoisPayesTotal = moisPayesList.length || contributions.reduce((acc, curr) => acc + (curr.moisCouverts?.length || 0), 0);
+
+  // Calcul des retards et des avances
+  const moisEnRetard = Math.max(0, moisActuelIndex - nombreMoisPayesTotal);
+  const moisAvances = Math.max(0, nombreMoisPayesTotal - moisActuelIndex);
 
   return (
-    <div className="space-y-8">
-      {/* En-tête de la page */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Tableau de bord</h1>
-        <p className="text-sm text-slate-500 mt-0.5">
-          Aperçu global de la caisse et de votre situation financière.
+    <div className="space-y-8 pb-10">
+      {/* En-tête style Dashboard CRM Pro */}
+      <div className="flex flex-col gap-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Tableau de bord</span>
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+              Bonjour, {membre?.nomComplet || `${membre?.prenom || ''} ${membre?.nom || ''}` || "Membre"} ✨
+            </h1>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300">
+            <ShieldCheck size={14} /> Espace Membre Actif
+          </span>
+        </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Suivi en temps réel de votre situation financière et des mouvements globaux de la Caisse Dev9.
         </p>
       </div>
 
-      {/* 📊 GRILLE DE CARTES PRINCIPALES (Design inspiré de Bompay) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* 1. Caisse Générale */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center mb-4">
-            <Landmark size={20} />
-          </div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Caisse Générale
-          </p>
-          <p className="text-2xl font-black text-slate-900 mt-1">
-            {stats.caisseGenerale}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-2">
-            Fonds total disponible du groupe
-          </p>
+      {/* 📊 CARTES KPI (Inspirées du modèle de design Dribbble) */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Votre vue d'ensemble & Caisse</h2>
+          <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+            <TrendingUp size={14} /> Synchronisé avec l'Admin
+          </span>
         </div>
 
-        {/* 2. Total Cotisé par le membre */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4">
-            <PiggyBank size={20} />
-          </div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Ma Contribution Total
-          </p>
-          <p className="text-2xl font-black text-emerald-600 mt-1">
-            {stats.totalCotiseMembre}
-          </p>
-          <p className="text-[11px] text-slate-400 mt-2">
-            Cumul de vos versements
-          </p>
-        </div>
-
-        {/* 3. Mois Requis (Impayés) */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                <AlertCircle size={20} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* 1. Total Général de la Caisse */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-blue-600" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Caisse Dev9</span>
+              <div className="p-2 bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400 rounded-xl">
+                <Wallet size={18} />
               </div>
-              <button
-                onClick={() => setModalType("impayes")}
-                className="flex items-center gap-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                <Eye size={14} /> Vue
-              </button>
             </div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Mois Requis (Retard)
+            <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {totalGeneralCaisse.toLocaleString()} <span className="text-xs font-normal text-slate-400">FC</span>
             </p>
-            <p className="text-2xl font-black text-rose-600 mt-1">
-              {stats.montantImpaye}
-            </p>
+            <p className="mt-2 text-[11px] text-slate-400">Trésorerie globale actuelle</p>
           </div>
-          <p className="text-[11px] text-rose-500 font-medium mt-2">
-            {stats.moisImpayes.length} mois en attente de paiement
-          </p>
-        </div>
 
-        {/* 4. Mois en Avance */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <TrendingUp size={20} />
+          {/* 2. Total Contributions Personnel */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Vos Cotisations</span>
+              <div className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 rounded-xl">
+                <TrendingUp size={18} />
               </div>
-              <button
-                onClick={() => setModalType("avances")}
-                className="flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                <Eye size={14} /> Vue
-              </button>
             </div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Mois en Avance
+            <p className="mt-3 text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+              {totalCotisePersonnel.toLocaleString()} <span className="text-xs font-normal text-slate-400">FC</span>
             </p>
-            <p className="text-2xl font-black text-blue-600 mt-1">
-              {stats.montantAvance}
-            </p>
+            <p className="mt-2 text-[11px] text-slate-400">Cumul de vos versements</p>
           </div>
-          <p className="text-[11px] text-blue-500 font-medium mt-2">
-            {stats.moisAvances.length} mois prépayés
-          </p>
+
+          {/* 3. Mois en Retard */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mois en Retard</span>
+              <div className="p-2 bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 rounded-xl">
+                <AlertTriangle size={18} />
+              </div>
+            </div>
+            <p className="mt-3 text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight">
+              {moisEnRetard} <span className="text-xs font-normal text-slate-400">mois</span>
+            </p>
+            <p className="mt-2 text-[11px] text-slate-400">À régulariser auprès de la caisse</p>
+          </div>
+
+          {/* 4. Mois Avancés */}
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mois Avancés / Futurs</span>
+              <div className="p-2 bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400 rounded-xl">
+                <Clock size={18} />
+              </div>
+            </div>
+            <p className="mt-3 text-2xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
+              {moisAvances} <span className="text-xs font-normal text-slate-400">mois</span>
+            </p>
+            <p className="mt-2 text-[11px] text-slate-400">Avances sur échéances futures</p>
+          </div>
+
         </div>
       </div>
 
-      {/* 📜 SECTION RÈGLES & VISION DE LA CAISSE */}
+      {/* SECTION NOTIFICATIONS & HISTORIQUE */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Vision & Règles Générales */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-            <div className="p-2 rounded-lg bg-slate-100 text-slate-800">
-              <Target size={18} />
+        
+        {/* 🔔 Centre de Notifications en Direct */}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Bell size={18} className="text-blue-600" />
+              <h2 className="font-bold text-slate-900 dark:text-white text-sm">Notifications Administrateur</h2>
             </div>
-            <h3 className="font-bold text-slate-900 text-base">
-              Vision & Règles Générales
-            </h3>
+            <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 rounded-full text-[10px] font-bold">
+              {notifications.length}
+            </span>
           </div>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            La caisse sert exclusivement de <b>capital de départ</b> pour le
-            lancement officiel de l'entreprise. Aucun intérêt personnel n'est
-            autorisé.
-          </p>
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-700 space-y-1.5">
-            <p>• <b>Dépôt mensuel :</b> 5 000 FC / mois auprès du caissier.</p>
-            <p>• <b>Mois spécial :</b> 25$ une fois l'an pour accélérer la croissance.</p>
-          </div>
-        </div>
 
-        {/* Conditions d'Emprunt */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
-              <Banknote size={18} />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base">
-              Règles des Emprunts
-            </h3>
-          </div>
-          <p className="text-xs text-slate-600">
-            Possibilité d'emprunter selon le barème officiel :
-          </p>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between p-2 bg-blue-50/50 rounded-lg text-blue-900">
-              <span>20k - 50k FC</span>
-              <span className="font-bold">+20% (1 mois)</span>
-            </div>
-            <div className="flex justify-between p-2 bg-blue-50/50 rounded-lg text-blue-900">
-              <span>60k - 70k FC</span>
-              <span className="font-bold">+15% (2 mois)</span>
-            </div>
-            <div className="flex justify-between p-2 bg-blue-50/50 rounded-lg text-blue-900">
-              <span>80k - 90k FC</span>
-              <span className="font-bold">+10% (3 mois)</span>
-            </div>
-            <div className="flex justify-between p-2 bg-blue-50/50 rounded-lg text-blue-900">
-              <span>100k FC et +</span>
-              <span className="font-bold">+5% (4 mois)</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Échelle des Pénalités */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-            <div className="p-2 rounded-lg bg-rose-50 text-rose-600">
-              <ShieldAlert size={18} />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base">
-              Barème des Pénalités
-            </h3>
-          </div>
-          <p className="text-xs text-slate-600">
-            En cas d'infraction au règlement :
-          </p>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between p-2 bg-rose-50/50 rounded-lg text-rose-900">
-              <span>Type C (💧 Goutte d'eau)</span>
-              <span className="font-bold">-2% parts</span>
-            </div>
-            <div className="flex justify-between p-2 bg-rose-50/50 rounded-lg text-rose-900">
-              <span>Type B (🩸 Goutte de sang)</span>
-              <span className="font-bold">-5% parts</span>
-            </div>
-            <div className="flex justify-between p-2 bg-rose-50/50 rounded-lg text-rose-900">
-              <span>Type A (Haute faute)</span>
-              <span className="font-bold">-10% parts</span>
-            </div>
-            <div className="flex justify-between p-2 bg-rose-50/50 rounded-lg text-rose-900">
-              <span>Type S (Critique)</span>
-              <span className="font-bold">Exclusion</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 🪟 MODAL DÉTAILS DES MOIS REQUIS / EN AVANCE */}
-      <Modal
-        isOpen={modalType !== null}
-        onClose={() => setModalType(null)}
-        title={
-          modalType === "impayes"
-            ? "Détails des Mois Requis (Impayés)"
-            : "Détails des Mois en Avance"
-        }
-        maxWidth="md"
-        isFullScreen={isFull}
-        setIsFullScreen={setIsFull}
-      >
-        <div className="space-y-4">
-          {modalType === "impayes" ? (
-            <div>
-              <p className="text-sm text-slate-600 mb-3">
-                Voici la liste des mois non encore régularisés auprès du caissier :
-              </p>
-              <div className="space-y-2">
-                {stats.moisImpayes.map((m, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-xs font-semibold text-rose-900 flex justify-between items-center"
-                  >
-                    <span>{m}</span>
-                    <span className="bg-rose-200 text-rose-800 px-2 py-0.5 rounded-full text-[10px]">
-                      En retard
+          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+            {notifications.length > 0 ? (
+              notifications.map((notif) => (
+                <div key={notif.id} className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-600" />
+                      {notif.titre}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(notif.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
                     </span>
                   </div>
-                ))}
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {notif.message}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 space-y-2">
+                <p className="text-xs text-slate-400 font-medium">Aucune notification pour l'instant.</p>
+                <p className="text-[11px] text-slate-400">Les mises à jour de l'admin apparaîtront ici.</p>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* 📋 Tableau des Dernières Transactions Personnelles */}
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <FileText size={18} className="text-blue-600" />
+              <h2 className="font-bold text-slate-900 dark:text-white text-sm">Vos Dernières Contributions</h2>
+            </div>
+            <Link href="/espace_Membre/transactions" className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1">
+              Voir tout <ChevronRight size={14} />
+            </Link>
+          </div>
+
+          {contributions.length > 0 ? (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {contributions.slice(0, 4).map((item) => (
+                <div key={item.id} className="py-3 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-white">
+                      Mois : {item.moisCouverts?.join(", ") || "N/A"}
+                    </p>
+                    <p className="text-slate-400 mt-0.5">Mode : {item.modePaiement} • {item.datePaiement}</p>
+                  </div>
+                  <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                    +{item.montantTotal?.toLocaleString()} FC
+                  </span>
+                </div>
+              ))}
             </div>
           ) : (
-            <div>
-              <p className="text-sm text-slate-600 mb-3">
-                Voici la liste des mois que vous avez payés par avance :
-              </p>
-              <div className="space-y-2">
-                {stats.moisAvances.map((m, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs font-semibold text-blue-900 flex justify-between items-center"
-                  >
-                    <span>{m}</span>
-                    <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full text-[10px]">
-                      Réglé
-                    </span>
-                  </div>
-                ))}
+            <div className="text-center py-10 space-y-3">
+              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center mx-auto text-slate-400">
+                <FileText size={20} />
               </div>
+              <p className="text-xs text-slate-500 font-medium">Aucune contribution enregistrée à votre nom.</p>
             </div>
           )}
         </div>
-      </Modal>
+
+      </div>
     </div>
   );
 }

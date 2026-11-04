@@ -85,3 +85,14 @@ export interface Emprunt {
   dateEcheance: string;
   statut: 'En cours' | 'Remboursé' | 'En retard';
 }
+
+// Structure d'une Notification pour le membre
+export interface NotificationMembre {
+  id: string;
+  membreId: string; // ID du membre concerné ou "TOUS"
+  titre: string;
+  message: string;
+  type: 'succes' | 'info' | 'alerte';
+  date: string;
+  lu: boolean;
+}

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,11 +11,9 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Une seule instance Firebase pour l'application.
+// Initialisation de Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Firestore stocke les données du membre et l'URL de sa photo.
+// Exportation de Firestore
 export const db = getFirestore(app);
-
-// Firebase Storage stocke le fichier image lui-même.
-export const storage = getStorage(app);
+export const auth = getAuth(app);

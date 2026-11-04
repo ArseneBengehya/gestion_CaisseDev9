@@ -14,7 +14,7 @@ import Link from 'next/link';
 
 // Import Firestore
 import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
+import { db } from '@/lib/firebase';
 
 interface ActiviteRecente {
   id: string;
