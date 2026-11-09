@@ -21,6 +21,7 @@ import EditMembreModal from '@/src/components/modals/EditMembreModal';
 import ViewMembreModal from '@/src/components/modals/ViewMembreModal';
 import { db } from '@/src/lib/firebase';
 import { uploadMemberPhoto } from '@/src/lib/member-photo';
+import { addNotification } from '@/src/services/dbService';
 
 export default function MembresPage() {
   const [membres, setMembres] = useState<Membre[]>([]);
@@ -152,6 +153,12 @@ export default function MembresPage() {
       };
 
       await setDoc(membreRef, nouveauMembre);
+      await addNotification({
+        membreId: 'TOUS',
+        titre: 'Nouvelle inscription',
+        message: `${data.nomComplet} vient d'être enregistré comme membre de la caisse.`,
+        type: 'info',
+      });
 
       if (data.envoyerWhatsApp) {
         try {

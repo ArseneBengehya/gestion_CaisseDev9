@@ -2,22 +2,42 @@
 
 import React, { useEffect, useState } from "react";
 import { ShieldCheck, BookOpen, Calendar, AlertCircle, Loader2, Coins } from "lucide-react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../../../lib/firebase"; // Ajuste le chemin selon la profondeur
 import { RegleCaisse } from "../../../../types";
 
 export default function ReglesCaissePage() {
   const [regles, setRegles] = useState<RegleCaisse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [parametres, setParametres] = useState({ cotisationMensuelle: 5000, cotisationMoisSpecial: 10000, dateDebutCaisse: "2025-01-01" });
 
   useEffect(() => {
-    // Écoute en temps réel de la collection 'regles' dans Firestore
-    const unsubscribe = onSnapshot(collection(db, "regles"), (snapshot) => {
-      const reglesData = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as RegleCaisse[];
-      setRegles(reglesData);
+    const unsubscribe = onSnapshot(doc(db, "settings", "caisse_config"), (snapshot) => {
+      if (!snapshot.exists()) {
+        setRegles([]);
+        setIsLoading(false);
+        return;
+      }
+      const data = snapshot.data();
+      setParametres({
+        cotisationMensuelle: Number(data.cotisationMensuelle || 5000),
+        cotisationMoisSpecial: Number(data.cotisationMoisSpecial || 10000),
+        dateDebutCaisse: data.dateDebutCaisse || "2025-01-01",
+      });
+      const personnalisées = Array.isArray(data.reglesGroupe)
+        ? data.reglesGroupe.map((regle: { id?: string; titre: string; contenu: string[] }) => ({
+            id: regle.id || regle.titre,
+            cotisationMensuelle: Number(data.cotisationMensuelle || 5000),
+            devise: "FC",
+            jourLimitePaiement: 5,
+            penaliteRetardActive: false,
+            montantPenalite: 0,
+            frequenceRappelJours: 30,
+            titre: regle.titre,
+            contenu: Array.isArray(regle.contenu) ? regle.contenu : [],
+          }))
+        : [];
+      setRegles(personnalisées as unknown as RegleCaisse[]);
       setIsLoading(false);
     });
 
@@ -48,6 +68,21 @@ export default function ReglesCaissePage() {
         </p>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Montant à payer par mois</p>
+          <p className="mt-1 text-xl font-black text-slate-900 dark:text-white">{parametres.cotisationMensuelle.toLocaleString()} FC</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Montant du mois spécial</p>
+          <p className="mt-1 text-xl font-black text-slate-900 dark:text-white">{parametres.cotisationMoisSpecial.toLocaleString()} FC</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Début de la caisse</p>
+          <p className="mt-1 text-xl font-black text-slate-900 dark:text-white">{new Date(`${parametres.dateDebutCaisse}T00:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</p>
+        </div>
+      </div>
+
       {/* Liste des règles */}
       <div className="grid grid-cols-1 gap-4">
         {regles.length > 0 ? (
@@ -56,41 +91,20 @@ export default function ReglesCaissePage() {
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                 <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white text-sm">
                   <ShieldCheck size={18} className="text-emerald-600" />
-                  <span>Règlement Officiel de la Caisse Dev9</span>
+                  <span>{regle.titre || "Règlement Officiel de la Caisse Dev9"}</span>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
                   Devise : {regle.devise || "FC"}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <p className="text-slate-400 font-medium flex items-center gap-1.5">
-                    <Coins size={14} /> Cotisation Mensuelle
-                  </p>
-                  <p className="font-black text-slate-900 dark:text-white text-base">
-                    {(regle.cotisationMensuelle || 0).toLocaleString()} {regle.devise || "FC"}
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <p className="text-slate-400 font-medium flex items-center gap-1.5">
-                    <Calendar size={14} /> Jour Limite de Paiement
-                  </p>
-                  <p className="font-black text-slate-900 dark:text-white text-base">
-                    Le {regle.jourLimitePaiement || 5} de chaque mois
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <p className="text-slate-400 font-medium flex items-center gap-1.5">
-                    <AlertCircle size={14} /> Pénalités de Retard
-                  </p>
-                  <p className="font-black text-slate-900 dark:text-white text-base">
-                    {regle.penaliteRetardActive ? `Actives (${regle.montantPenalite || 0} ${regle.devise || "FC"})` : "Inactives"}
-                  </p>
-                </div>
-              </div>
+              {regle.contenu && regle.contenu.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600 dark:text-slate-300">
+                  {regle.contenu.map((ligne, index) => (
+                    <li key={`${regle.id}-${index}`}>{ligne}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))
         ) : (

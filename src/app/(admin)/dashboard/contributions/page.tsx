@@ -16,6 +16,7 @@ import {
   doc,
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { addNotification } from '@/src/services/dbService';
 
 interface ContributionDoc {
   id: string;
@@ -163,17 +164,25 @@ export default function ContributionsPage() {
   }, [membres, rawContributions, caisseConfig]);
 
   // 5. ENREGISTRER UNE CONTRIBUTION DANS FIRESTORE (Utilisation de Toast)
-  const handleAddContribution = async (formData: { membreId: string; nombreMois: number; modePaiement: string; note: string }) => {
+  const handleAddContribution = async (formData: { membreId: string; nombreMois: number; moisSelectionnes: string[]; modePaiement: string; note: string }) => {
     try {
       const montantVerse = formData.nombreMois * caisseConfig.cotisationMensuelle;
+      const membre = membres.find((item) => item.id === formData.membreId);
 
       await addDoc(collection(db, 'contributions'), {
         membreId: formData.membreId,
         nombreMois: formData.nombreMois,
+        moisCouverts: formData.moisSelectionnes,
         montantVerse,
         modePaiement: formData.modePaiement,
         note: formData.note,
         datePaiement: new Date().toISOString(),
+      });
+      await addNotification({
+        membreId: 'TOUS',
+        titre: 'Nouvelle contribution',
+        message: `${membre?.nomComplet || 'Un membre'} vient de faire une contribution de ${montantVerse.toLocaleString()} FC.`,
+        type: 'succes',
       });
 
       showToast('success', `Contribution de ${montantVerse.toLocaleString()} FC enregistrée avec succès !`);

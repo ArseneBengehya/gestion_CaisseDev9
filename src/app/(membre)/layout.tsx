@@ -14,14 +14,15 @@ import {
   X,
   Bell,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 
 // Importations Firebase et Firestore
-import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import Modal from "@/components/ui/Modal"; // Ton composant modal existant
+import Modal from "@/components/ui/Modal";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 export default function MembreLayout({
   children,
@@ -36,41 +37,104 @@ export default function MembreLayout({
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [userName, setUserName] = useState("Espace Membre");
+  const [userPhoto, setUserPhoto] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [caisseLogo, setCaisseLogo] = useState("");
+  const [unreadIds, setUnreadIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    return onSnapshot(doc(db, "settings", "caisse_config"), (snapshot) => {
+      if (snapshot.exists()) setCaisseLogo(snapshot.data().caisseLogo || "");
+    });
+  }, []);
 
   // Écoute de l'authentification et des notifications en temps réel
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUserId(user.uid);
-        
-        // Écouter les notifications Firestore pour ce membre ou globales ("TOUS")
-        const notifsRef = collection(db, "notifications");
-        const qNotifs = query(notifsRef, where("membreId", "in", [user.uid, "TOUS"]));
-        
-        const unsubscribeNotifs = onSnapshot(qNotifs, (snapshot) => {
-          const notifsList = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          // Trier par date décroissante
-          notifsList.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-          setNotifications(notifsList);
-        });
+    const userStr = localStorage.getItem("caisse_user");
+    if (!userStr) {
+      router.push("/login");
+      return;
+    }
 
-        return () => unsubscribeNotifs();
+    let user: { id?: string; role?: string; photoUrl?: string };
+    try {
+      user = JSON.parse(userStr);
+    } catch {
+      localStorage.removeItem("caisse_user");
+      router.push("/login");
+      return;
+    }
+    if (!user.id) {
+      localStorage.removeItem("caisse_user");
+      router.push("/login");
+      return;
+    }
+
+    setCurrentUserId(user.id);
+
+    const unsubscribeMember = onSnapshot(
+      doc(db, "membres", user.id),
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          localStorage.removeItem("caisse_user");
+          router.push("/login");
+          return;
+        }
+        const membre = snapshot.data();
+        if (membre.statut === "INACTIF" || membre.statut === "SUPPRIME") {
+          localStorage.removeItem("caisse_user");
+          router.push("/login");
+          return;
+        }
+        const role = membre.role || user.role || "MEMBRE";
+        setIsAdmin(role === "ADMIN");
+        setUserName(membre.nomComplet || `${membre.prenom || ""} ${membre.nom || ""}`.trim() || "Espace Membre");
+        setUserPhoto(membre.photoUrl || membre.avatarUrl || user.photoUrl || "");
+        setIsAuthorized(true);
+      },
+      (error) => {
+        console.error("Erreur lors du chargement de la session membre :", error);
+        localStorage.removeItem("caisse_user");
+        router.push("/login");
       }
+    );
+
+    const notifsRef = collection(db, "notifications");
+    const qNotifs = query(notifsRef, where("membreId", "in", [user.id, "TOUS"]));
+    const unsubscribeNotifs = onSnapshot(qNotifs, (snapshot) => {
+      const notifsList = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      notifsList.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+      setNotifications(notifsList);
     });
 
-    return () => unsubscribeAuth();
-  }, []);
+    return () => {
+      unsubscribeMember();
+      unsubscribeNotifs();
+    };
+  }, [router]);
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push("/");
-    } catch (error) {
-      console.error("Erreur lors de la déconnexion :", error);
-    }
+    localStorage.removeItem("caisse_user");
+    router.push("/login");
+  };
+
+  const unreadCount = notifications.filter((notification) => notification.lu !== true).length;
+
+  const openNotifications = async () => {
+    setIsNotifOpen(true);
+    const ids = notifications.filter((notification) => notification.lu !== true).map((notification) => notification.id);
+    setUnreadIds(ids);
+    await Promise.all(ids.map((id) => updateDoc(doc(db, "notifications", id), { lu: true })));
+  };
+
+  const closeNotifications = () => {
+    setIsNotifOpen(false);
+    setUnreadIds([]);
   };
 
   const menuItems = [
@@ -96,6 +160,17 @@ export default function MembreLayout({
     },
   ];
 
+  if (!isAuthorized) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 text-slate-700 dark:bg-slate-950 dark:text-slate-100">
+        <div className="flex items-center gap-3">
+          <Loader2 size={24} className="animate-spin text-slate-500 dark:text-slate-300" />
+          <span className="text-sm font-medium">Chargement de votre espace membre...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 flex text-slate-800 dark:text-slate-100 relative">
       {/* 🟢 OVERLAY SOMBRE SUR MOBILE */}
@@ -117,7 +192,7 @@ export default function MembreLayout({
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3 px-1">
               <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">
-                <Building2 size={20} />
+                {caisseLogo ? <img src={caisseLogo} alt="Logo Caisse Dev9" className="h-full w-full rounded-xl object-cover" /> : <Building2 size={20} />}
               </div>
               <div>
                 <h2 className="font-bold text-slate-900 dark:text-white text-base leading-tight">
@@ -145,7 +220,7 @@ export default function MembreLayout({
             </p>
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || (item.href !== "/espace_Membre" && pathname.startsWith(`${item.href}/`));
               return (
                 <Link
                   key={item.href}
@@ -200,40 +275,55 @@ export default function MembreLayout({
 
           {/* Section Droite : Notification & Profil utilisateur */}
           <div className="flex items-center gap-4">
+            {isAdmin && (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                <ShieldCheck size={15} />
+                <span className="hidden sm:inline">Vue Admin</span>
+              </Link>
+            )}
             {/* 🔔 Bouton de Notification dans la Navbar */}
             <button
-              onClick={() => setIsNotifOpen(true)}
+              onClick={openNotifications}
               className="relative p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               title="Voir les notifications"
             >
               <Bell size={18} />
-              {notifications.length > 0 && (
+              {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm">
-                  {notifications.length}
+                  {unreadCount}
                 </span>
               )}
             </button>
 
+            <ThemeToggle />
+
             {/* Avatar / Profil rapide */}
-            <div className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-4">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                M
-              </div>
+            <Link href="/espace_Membre/profil" className="flex items-center gap-3 border-l border-slate-200 dark:border-slate-800 pl-4 transition hover:opacity-80">
+              {userPhoto ? (
+                <img src={userPhoto} alt={userName} className="h-8 w-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-sm" />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                  {userName.charAt(0).toUpperCase()}
+                </div>
+              )}
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 hidden sm:inline-block">
-                Espace Membre
+                {userName}
               </span>
-            </div>
+            </Link>
           </div>
         </header>
 
         {/* Zone dynamique {children} */}
-        <main className="p-4 sm:p-8 flex-1 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="p-4 sm:p-6 lg:p-8 flex-1 w-full">{children}</main>
       </div>
 
       {/* 🪟 MODAL DES NOTIFICATIONS EN DIRECT */}
       <Modal
         isOpen={isNotifOpen}
-        onClose={() => setIsNotifOpen(false)}
+        onClose={closeNotifications}
         title="Centre de Notifications"
         maxWidth="md"
       >
@@ -242,7 +332,11 @@ export default function MembreLayout({
             notifications.map((notif: any) => (
               <div
                 key={notif.id}
-                className="p-4 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1.5 transition-all hover:bg-slate-100/80"
+                className={`p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5 transition-all hover:bg-slate-100/80 dark:hover:bg-slate-800 ${
+                  unreadIds.includes(notif.id)
+                    ? "bg-blue-50 font-bold dark:bg-blue-950/30"
+                    : "bg-slate-50 dark:bg-slate-800/40"
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">

@@ -17,6 +17,7 @@ import {
   doc,
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { addNotification } from '@/src/services/dbService';
 
 export default function EmpruntsPage() {
   const [emprunts, setEmprunts] = useState<Emprunt[]>([]);
@@ -112,6 +113,12 @@ export default function EmpruntsPage() {
         dateEmprunt: new Date().toISOString().split('T')[0],
         dateEcheance: data.dateEcheance,
         statut: 'En cours',
+      });
+      await addNotification({
+        membreId: 'TOUS',
+        titre: 'Nouvel emprunt',
+        message: `Un emprunt de ${data.montantEmprunte.toLocaleString()} FC a été enregistré pour ${nomMembre}.`,
+        type: 'info',
       });
 
       showToast('success', "Emprunt enregistré avec succès dans Firestore !");

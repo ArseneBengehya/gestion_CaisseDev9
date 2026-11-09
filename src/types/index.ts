@@ -30,11 +30,13 @@ export interface Contribution {
   id: string;
   membreId: string;
   membreNomComplet?: string;
-  montantTotal: number;
-  nombreMoisPayes: number;
-  moisCouverts: string[]; // Exemple: ['2026-09', '2026-10']
+  montantTotal?: number;
+  montantVerse?: number;
+  nombreMoisPayes?: number;
+  nombreMois?: number;
+  moisCouverts?: string[]; // Exemple: ['2026-09', '2026-10']
   datePaiement: string;
-  modePaiement: 'CASH' | 'MOBILE_MONEY' | 'VIREMENT';
+  modePaiement: 'CASH' | 'MOBILE_MONEY' | 'VIREMENT' | string;
   referenceTransaction?: string;
   note?: string;
 }
@@ -65,6 +67,8 @@ export interface Depense {
 // 5. Structure des Règles applicatives de la caisse
 export interface RegleCaisse {
   id: string;
+  titre?: string;
+  contenu?: string[];
   cotisationMensuelle: number; // Ex: 5000
   devise: string; // Ex: 'FC', 'USD'
   jourLimitePaiement: number; // Ex: Le 5 de chaque mois

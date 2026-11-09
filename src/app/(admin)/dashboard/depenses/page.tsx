@@ -20,6 +20,7 @@ import {
   doc,
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { addNotification } from '@/src/services/dbService';
 
 export default function DepensesPage() {
   const [depenses, setDepenses] = useState<Depense[]>([]);
@@ -97,6 +98,12 @@ export default function DepensesPage() {
       };
 
       await addDoc(collection(db, 'depenses'), nouvelleDepense);
+      await addNotification({
+        membreId: 'TOUS',
+        titre: 'Nouvelle dépense',
+        message: `Une dépense de ${newDepenseData.montant.toLocaleString()} FC a été enregistrée pour ${newDepenseData.motif}.`,
+        type: 'alerte',
+      });
       showToast('success', `Dépense de ${newDepenseData.montant.toLocaleString()} FC enregistrée avec succès !`);
       setIsAddOpen(false);
     } catch (error) {
