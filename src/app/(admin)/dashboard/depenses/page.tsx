@@ -239,7 +239,7 @@ export default function DepensesPage() {
 
       {/* Tableau des dépenses */}
       {isLoading ? (
-        <div className="p-8 text-center text-slate-500">Chargement des dépenses depuis Firestore...</div>
+        <div className="p-8 text-center text-slate-500">Chargement des dépenses en cours...</div>
       ) : (
         <DataTable
           data={depenses}

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Send, PhoneCall, ShieldAlert, Loader2, CheckCircle2 } from 'lucide-react';
 import { Membre } from '@/src/types';
 import Toast from '@/src/components/ui/Toast';
+import { assurerPenalites, moisImpayesPour, nombreMoisAttendus, Penalite, soldePenalite } from '@/src/lib/penalties';
 
 // Import Firestore
 import { collection, onSnapshot, doc } from 'firebase/firestore';
@@ -13,9 +14,12 @@ interface ContributionData {
   id: string;
   membreId: string;
   nombreMois: number;
+  moisSelectionnes?: string[];
   montantVerse: number;
   datePaiement: string;
 }
+
+type PenaliteData = Penalite;
 
 interface MembreEnRetard {
   id: string;
@@ -32,8 +36,11 @@ interface MembreEnRetard {
 export default function RetardsPage() {
   const [membres, setMembres] = useState<Membre[]>([]);
   const [contributions, setContributions] = useState<ContributionData[]>([]);
+  const [penalites, setPenalites] = useState<PenaliteData[]>([]);
   const [membresRetard, setMembresRetard] = useState<MembreEnRetard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [contributionsLoaded, setContributionsLoaded] = useState(false);
   
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sentSuccessId, setSentSuccessId] = useState<string | null>(null);
@@ -54,6 +61,9 @@ export default function RetardsPage() {
   const [caisseConfig, setCaisseConfig] = useState({
     dateDebutCaisse: '2025-01-01',
     cotisationMensuelle: 5000,
+    penaliteRetardActive: true,
+    moisRetardAvantPenalite: 2,
+    montantPenalite: 1000,
   });
 
   // 1. Écouter la configuration de la Caisse Dev9
@@ -61,11 +71,20 @@ export default function RetardsPage() {
     const unsubConfig = onSnapshot(doc(db, 'settings', 'caisse_config'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        const cotisationMensuelle = Number(data.cotisationMensuelle ?? 5000);
+        const montantPenalite = Number(data.montantPenalite ?? 1000);
         setCaisseConfig({
           dateDebutCaisse: data.dateDebutCaisse || '2025-01-01',
-          cotisationMensuelle: Number(data.cotisationMensuelle) || 5000,
+          cotisationMensuelle: Number.isFinite(cotisationMensuelle) ? cotisationMensuelle : 5000,
+          penaliteRetardActive: data.penaliteRetardActive ?? true,
+          moisRetardAvantPenalite: Math.max(1, Number(data.moisRetardAvantPenalite) || 2),
+          montantPenalite: Number.isFinite(montantPenalite) ? montantPenalite : 1000,
         });
       }
+      setConfigLoaded(true);
+    }, (error) => {
+      console.error('Erreur de chargement des paramètres de la caisse :', error);
+      showToast('error', 'Impossible de charger les paramètres de pénalité.');
     });
 
     return () => unsubConfig();
@@ -110,52 +129,103 @@ export default function RetardsPage() {
           id: d.id,
           membreId: data.membreId || '',
           nombreMois: Number(data.nombreMois) || 0,
+          moisSelectionnes: Array.isArray(data.moisSelectionnes)
+            ? data.moisSelectionnes
+            : Array.isArray(data.moisCouverts) ? data.moisCouverts : undefined,
           montantVerse: Number(data.montantVerse) || 0,
           datePaiement: data.datePaiement || '',
         };
       });
 
       setContributions(list);
+      setContributionsLoaded(true);
       setIsLoading(false);
+    }, (error) => {
+      console.error('Erreur de chargement des contributions :', error);
+      showToast('error', 'Impossible de charger les contributions pour calculer les pénalités.');
     });
 
     return () => unsubContributions();
   }, []);
 
+  useEffect(() => {
+    const unsubPenalites = onSnapshot(collection(db, 'penalites'), (snapshot) => {
+      setPenalites(snapshot.docs.map((d) => ({
+        id: d.id,
+        membreId: d.data().membreId || '',
+        moisDeclenchement: Number(d.data().moisDeclenchement) || 0,
+        moisDeclenchementKey: d.data().moisDeclenchementKey || '',
+        montantDu: Number(d.data().montantDu) || 0,
+        montantPaye: Number(d.data().montantPaye) || 0,
+        statut: d.data().statut || 'A_PAYER',
+        dateCreation: d.data().dateCreation || '',
+        dateDernierPaiement: d.data().dateDernierPaiement,
+      } as PenaliteData)));
+    }, (error) => {
+      console.error('Erreur de chargement des pénalités :', error);
+      showToast('error', 'Impossible de charger les pénalités enregistrées.');
+    });
+
+    return () => unsubPenalites();
+  }, []);
+
+  // Enregistrer une pénalité une seule fois à chaque seuil atteint.
+  useEffect(() => {
+    if (!configLoaded || !contributionsLoaded || !caisseConfig.penaliteRetardActive || caisseConfig.montantPenalite <= 0 || membres.length === 0) return;
+
+    const moisAttendusTotal = nombreMoisAttendus(caisseConfig.dateDebutCaisse);
+
+    const enregistrerPenalites = async () => {
+      try {
+        await Promise.all(membres.map(async (membre) => {
+          const moisImpayes = moisImpayesPour(
+            caisseConfig.dateDebutCaisse,
+            moisAttendusTotal,
+            contributions.filter((contribution) => contribution.membreId === membre.id)
+          );
+          await assurerPenalites(
+            membre.id,
+            moisImpayes,
+            caisseConfig.moisRetardAvantPenalite,
+            caisseConfig.montantPenalite
+          );
+        }));
+      } catch (error) {
+        console.error('Erreur lors de l’enregistrement des pénalités :', error);
+        showToast('error', 'Impossible d’enregistrer les nouvelles pénalités.');
+      }
+    };
+
+    void enregistrerPenalites();
+  }, [membres, contributions, caisseConfig, configLoaded, contributionsLoaded]);
+
   // 4. Calculer les retards de manière réactive
   useEffect(() => {
     if (membres.length === 0) return;
 
-    const dateDebut = new Date(caisseConfig.dateDebutCaisse);
-    const maintenant = new Date();
-
-    const moisAttendusTotal = Math.max(
-      1,
-      (maintenant.getFullYear() - dateDebut.getFullYear()) * 12 +
-        (maintenant.getMonth() - dateDebut.getMonth()) +
-        1
-    );
+    const moisAttendusTotal = nombreMoisAttendus(caisseConfig.dateDebutCaisse);
 
     const MONTANT_MENSUEL = caisseConfig.cotisationMensuelle;
 
     const resultats: MembreEnRetard[] = membres
       .map((membre) => {
-        const memberContribs = contributions.filter((c) => c.membreId === membre.id);
-        const totalMoisPayes = memberContribs.reduce(
-          (sum, c) => sum + (c.nombreMois || 0),
-          0
+        const moisImpayes = moisImpayesPour(
+          caisseConfig.dateDebutCaisse,
+          moisAttendusTotal,
+          contributions.filter((contribution) => contribution.membreId === membre.id)
         );
 
-        const moisEnRetard = Math.max(0, moisAttendusTotal - totalMoisPayes);
+        const moisEnRetard = moisImpayes.length;
         const montantCotisationDuh = moisEnRetard * MONTANT_MENSUEL;
-        const penalite = moisEnRetard > 0 ? moisEnRetard * 1000 : 0;
+        const penalite = penalites
+          .filter((p) => p.membreId === membre.id)
+          .reduce((total, p) => total + soldePenalite(p), 0);
         const totalDuh = montantCotisationDuh + penalite;
 
-        const moisImpayesNoms: string[] = [];
-        for (let i = totalMoisPayes; i < moisAttendusTotal; i++) {
-          const d = new Date(dateDebut.getFullYear(), dateDebut.getMonth() + i, 1);
-          moisImpayesNoms.push(d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }));
-        }
+        const moisImpayesNoms = moisImpayes.map((mois) => {
+          const [year, month] = mois.split('-').map(Number);
+          return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+        });
 
         return {
           id: membre.id,
@@ -169,10 +239,10 @@ export default function RetardsPage() {
           moisImpayesNoms,
         };
       })
-      .filter((m) => m.moisEnRetard > 0);
+      .filter((m) => m.moisEnRetard > 0 || m.penalite > 0);
 
     setMembresRetard(resultats);
-  }, [membres, contributions, caisseConfig]);
+  }, [membres, contributions, caisseConfig, penalites]);
 
   // Appeler l'API de relance automatique (Utilisation du Toast)
   const handleSendAutomaticRelance = async (membre: MembreEnRetard) => {
@@ -211,6 +281,8 @@ export default function RetardsPage() {
   };
 
   const totalDettes = membresRetard.reduce((acc, curr) => acc + curr.totalDuh, 0);
+  const penalitesEnAttente = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
+  const penalitesEnregistrees = penalites.reduce((total, penalite) => total + penalite.montantDu, 0);
 
   return (
     <div className="relative space-y-6">
@@ -237,7 +309,7 @@ export default function RetardsPage() {
       </div>
 
       {/* Cartes KPI redessinées (épurées et sobres) */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -263,6 +335,23 @@ export default function RetardsPage() {
           </div>
           <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-slate-900 dark:text-white truncate">
             {membresRetard.length} <span className="text-xs font-normal text-slate-500">Membre(s)</span>
+          </p>
+        </div>
+
+        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Pénalités enregistrées
+            </span>
+            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <ShieldAlert size={18} />
+            </div>
+          </div>
+          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums truncate">
+            {penalitesEnregistrees.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Solde à recouvrer : {penalitesEnAttente.toLocaleString()} FC
           </p>
         </div>
       </div>
@@ -305,7 +394,7 @@ export default function RetardsPage() {
                         {membre.nomComplet}
                       </span>
                       <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold dark:bg-rose-950/60 dark:text-rose-300">
-                        {membre.moisEnRetard} mois de retard
+                        {membre.moisEnRetard > 0 ? `${membre.moisEnRetard} mois de retard` : 'Pénalité impayée'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">

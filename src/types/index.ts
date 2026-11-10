@@ -47,6 +47,7 @@ export interface StatutMembreContribution {
   detteActuelle: number;
   moisPayes: string[];        // ex: ['2026-01', '2026-02']
   moisImpayes: string[];      // ex: ['2026-03']
+  moisImpayesKeys?: string[]; // Ex: ['2026-03']
   moisFutursPayes: string[];  // ex: ['2026-11', '2026-12']
   dernierPaiementDate?: string;
 }
@@ -69,6 +70,7 @@ export interface RegleCaisse {
   devise: string; // Ex: 'FC', 'USD'
   jourLimitePaiement: number; // Ex: Le 5 de chaque mois
   penaliteRetardActive: boolean;
+  moisRetardAvantPenalite: number;
   montantPenalite: number;
   frequenceRappelJours: number; // Ex: Tous les 30 jours
 }

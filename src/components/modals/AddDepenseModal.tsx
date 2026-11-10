@@ -51,7 +51,7 @@ export default function AddDepenseModal({
             required
             value={motif}
             onChange={(e) => setMotif(e.target.value)}
-            placeholder="Ex: Achat de fournitures de bureau"
+            placeholder="entrer le motif"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -64,7 +64,7 @@ export default function AddDepenseModal({
             min="1"
             value={montant}
             onChange={(e) => setMontant(e.target.value)}
-            placeholder="Ex: 15000"
+            placeholder="Entrer le monatnt"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -91,7 +91,7 @@ export default function AddDepenseModal({
             required
             value={approuvePar}
             onChange={(e) => setApprouvePar(e.target.value)}
-            placeholder="Ex: Président / Trésorier"
+            placeholder="Entrer le nom du lid"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>

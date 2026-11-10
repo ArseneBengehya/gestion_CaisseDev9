@@ -55,7 +55,7 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
               value={min}
               onChange={(e) => setMin(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Ex: 20000"
+              placeholder="de"
             />
           </div>
 
@@ -68,7 +68,7 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
               value={max}
               onChange={(e) => setMax(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Ex: 50000 (Vide = 'Et plus')"
+              placeholder="a"
             />
           </div>
         </div>

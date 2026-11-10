@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Calendar, CreditCard, FileText } from 'lucide-react';
+import { Calendar, CreditCard } from 'lucide-react';
 import { StatutMembreContribution } from '@/src/types';
 import Modal from '../ui/Modal';
 
@@ -9,14 +9,16 @@ interface ViewHistoriqueModalProps {
   isOpen: boolean;
   onClose: () => void;
   data: StatutMembreContribution | null;
+  montantMensuel?: number;
 }
 
 export default function ViewHistoriqueModal({
   isOpen,
   onClose,
   data,
+  montantMensuel = 5000,
 }: ViewHistoriqueModalProps) {
-  const [isFullScreen, setIsFullScreen] = useState(true); // Par défaut en plein écran comme demandé
+  const [isFullScreen, setIsFullScreen] = useState(true);
 
   if (!data) return null;
 
@@ -69,24 +71,34 @@ export default function ViewHistoriqueModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-sm text-slate-700">
-                {data.moisPayes.map((mois, index) => (
-                  <tr key={index} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium flex items-center gap-2">
-                      <Calendar size={16} className="text-blue-500" />
-                      {mois}
-                    </td>
-                    <td className="px-6 py-4 font-semibold text-emerald-600">5,000 FC</td>
-                    <td className="px-6 py-4 flex items-center gap-1.5 text-slate-600">
-                      <CreditCard size={16} className="text-slate-400" />
-                      Cash / Espèces
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                        Payé
-                      </span>
+                {data.moisPayes.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
+                      Aucun mois payé pour le moment.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  data.moisPayes.map((mois, index) => (
+                    <tr key={index} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 font-medium flex items-center gap-2">
+                        <Calendar size={16} className="text-blue-500" />
+                        {mois}
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-emerald-600">
+                        {montantMensuel.toLocaleString()} FC
+                      </td>
+                      <td className="px-6 py-4 flex items-center gap-1.5 text-slate-600">
+                        <CreditCard size={16} className="text-slate-400" />
+                        Cash / Espèces
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                          Payé
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

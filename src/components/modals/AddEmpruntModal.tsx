@@ -120,7 +120,7 @@ export default function AddEmpruntModal({
               <option value="">Sélectionner un membre...</option>
               {membres.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.nomComplet || `${m.prenom} ${m.nom}`} ({m.telephone})
+                  {m.nomComplet || `${m.prenom} ${m.nom}`}
                 </option>
               ))}
             </select>
@@ -142,7 +142,7 @@ export default function AddEmpruntModal({
               min="1000"
               value={montant}
               onChange={(e) => setMontant(e.target.value)}
-              placeholder="Ex: 50000"
+              placeholder="Entrer montant"
               className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
             />
           </div>

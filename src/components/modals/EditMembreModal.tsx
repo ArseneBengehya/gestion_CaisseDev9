@@ -106,10 +106,16 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
     <Modal isOpen={isOpen} onClose={onClose} title="Modifier les informations du membre" maxWidth="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800/60">
-          <div className="rounded-xl bg-white p-2.5 text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-200"><UserRound size={20} /></div>
+          <div className="rounded-xl bg-white p-2.5 text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-200">
+              {photoPreview ? (
+                <img src={photoPreview}  className="h-9 w-9 rounded-full object-cover" />
+              ) : (
+                <UserRound  />
+              )}
+          </div>
           <div>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Modifier un membre</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Les informations et la photo sont synchronisées avec Firestore.</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{membre?.nomComplet}</p>
+            {/* <p className="text-xs text-slate-500 dark:text-slate-400">Les informations et la photo sont synchronisées avec Firestore.</p> */}
           </div>
         </div>
 
@@ -118,7 +124,7 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
           <input value={nomComplet} onChange={(event) => setNomComplet(event.target.value)} required placeholder="Ex. Arsène Bengehya" className={inputClassName} />
         </div>
 
-        <div>
+        {/* <div>
           <label className={labelClassName}><span className="inline-flex items-center gap-1.5"><ImageIcon size={14} /> Photo de profil</span></label>
           <div className="flex items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-800/40">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-900">
@@ -138,7 +144,7 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
             </div>
           </div>
           {photoError && <p role="alert" className="mt-2 text-xs font-medium text-rose-700 dark:text-rose-300">{photoError}</p>}
-        </div>
+        </div> */}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>

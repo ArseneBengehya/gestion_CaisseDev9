@@ -13,16 +13,50 @@ import {
 import Link from 'next/link';
 
 // Import Firestore
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { assurerPenalites, moisImpayesPour, nombreMoisAttendus } from '@/src/lib/penalties';
 
 interface ActiviteRecente {
   id: string;
-  type: 'contribution' | 'depense';
+  type: 'entree' | 'depense';
   membre: string;
   montant: number;
   date: string;
   description: string;
+}
+
+interface MembreDashboard {
+  id: string;
+  nom?: string;
+  prenom?: string;
+  nomComplet?: string;
+  statut?: string;
+}
+
+interface ContributionDashboard {
+  id: string;
+  membreId: string;
+  nombreMois: number;
+  moisSelectionnes?: string[];
+  moisCouverts?: string[];
+  montantVerse: number;
+  datePaiement?: string;
+}
+
+interface DepenseDashboard {
+  id: string;
+  montant: number;
+  dateDepense?: string;
+  approuvePar?: string;
+  motif?: string;
+}
+
+interface PaiementPenaliteDashboard {
+  id: string;
+  membreId: string;
+  montant: number;
+  datePaiement?: string;
 }
 
 export default function AdminDashboardPage() {
@@ -34,104 +68,225 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let membresData: any[] = [];
-    let contribsData: any[] = [];
-    let depensesData: any[] = [];
+    let membresData: MembreDashboard[] = [];
+    let contributionsData: ContributionDashboard[] = [];
+    let depensesData: DepenseDashboard[] = [];
+    let paiementsPenalitesData: PaiementPenaliteDashboard[] = [];
+    let caisseConfig = {
+      dateDebutCaisse: '2025-01-01',
+      penaliteRetardActive: true,
+      moisRetardAvantPenalite: 2,
+      montantPenalite: 1000,
+    };
+    let dernierCalculPenalites = '';
+    const loaded = { membres: false, contributions: false, depenses: false, paiements: false, config: false };
 
-    // 1. Écouter les membres
+    const recalculer = () => {
+      const membresActifsData = membresData.filter((membre) => membre.statut !== 'INACTIF');
+      setMembresActifs(membresActifsData.length);
+
+      const moisAttendus = nombreMoisAttendus(caisseConfig.dateDebutCaisse);
+      setMembresEnRetard(membresActifsData.filter((membre) => {
+        const contributionsMembre = contributionsData
+          .filter((contribution) => contribution.membreId === membre.id)
+          .map((contribution) => ({
+            nombreMois: contribution.nombreMois,
+            moisSelectionnes: contribution.moisSelectionnes ?? contribution.moisCouverts,
+          }));
+        return moisImpayesPour(caisseConfig.dateDebutCaisse, moisAttendus, contributionsMembre).length > 0;
+      }).length);
+
+      if (
+        loaded.config &&
+        loaded.membres &&
+        loaded.contributions &&
+        caisseConfig.penaliteRetardActive &&
+        caisseConfig.montantPenalite > 0
+      ) {
+        const fingerprint = JSON.stringify([
+          caisseConfig,
+          membresActifsData.map((membre) => membre.id),
+          contributionsData.map(({ id, nombreMois, moisSelectionnes, moisCouverts }) => [
+            id, nombreMois, moisSelectionnes, moisCouverts,
+          ]),
+        ]);
+        if (fingerprint !== dernierCalculPenalites) {
+          dernierCalculPenalites = fingerprint;
+          void Promise.all(membresActifsData.map((membre) => {
+            const contributionsMembre = contributionsData
+              .filter((contribution) => contribution.membreId === membre.id)
+              .map((contribution) => ({
+                nombreMois: contribution.nombreMois,
+                moisSelectionnes: contribution.moisSelectionnes ?? contribution.moisCouverts,
+              }));
+            const moisImpayes = moisImpayesPour(
+              caisseConfig.dateDebutCaisse,
+              moisAttendus,
+              contributionsMembre
+            );
+            return assurerPenalites(
+              membre.id,
+              moisImpayes,
+              caisseConfig.moisRetardAvantPenalite,
+              caisseConfig.montantPenalite
+            );
+          })).catch((error) => {
+            console.error('Erreur d’enregistrement des pénalités depuis le tableau de bord :', error);
+          });
+        }
+      }
+
+      const nomMembre = (membreId: string) => {
+        const membre = membresData.find((item) => item.id === membreId);
+        return membre?.nomComplet || `${membre?.prenom || ''} ${membre?.nom || ''}`.trim() || 'Membre';
+      };
+      const dateMouvement = (date?: string) =>
+        date ? String(date).split('T')[0] : new Date().toISOString().split('T')[0];
+
+      const cotisations: ActiviteRecente[] = contributionsData.map((contribution) => ({
+        id: `contribution_${contribution.id}`,
+        type: 'entree',
+        membre: nomMembre(contribution.membreId),
+        montant: contribution.montantVerse,
+        date: dateMouvement(contribution.datePaiement),
+        description: `Cotisation (${contribution.nombreMois || 1} mois)`,
+      }));
+
+      const penalitesPayees: ActiviteRecente[] = paiementsPenalitesData.map((paiement) => ({
+        id: `penalite_${paiement.id}`,
+        type: 'entree',
+        membre: nomMembre(paiement.membreId),
+        montant: paiement.montant,
+        date: dateMouvement(paiement.datePaiement),
+        description: 'Paiement de pénalité',
+      }));
+
+      const depenses: ActiviteRecente[] = depensesData.map((depense) => ({
+        id: `depense_${depense.id}`,
+        type: 'depense',
+        membre: depense.approuvePar || 'Admin',
+        montant: depense.montant,
+        date: dateMouvement(depense.dateDepense),
+        description: depense.motif || 'Dépense caisse',
+      }));
+
+      const totalCotisationsVersees = contributionsData.reduce((total, item) => total + item.montantVerse, 0);
+      const totalPenalitesPayees = paiementsPenalitesData.reduce((total, item) => total + item.montant, 0);
+      setTotalContributions(totalCotisationsVersees + totalPenalitesPayees);
+      setTotalDepenses(depensesData.reduce((total, item) => total + item.montant, 0));
+      setActivitesRecentes(
+        [...cotisations, ...penalitesPayees, ...depenses]
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 5)
+      );
+
+      setIsLoading(!Object.values(loaded).every(Boolean));
+    };
+
     const unsubMembres = onSnapshot(collection(db, 'membres'), (snapshot) => {
-      membresData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const actifs = membresData.filter((m) => m.statut !== 'INACTIF').length;
-      setMembresActifs(actifs);
-      calculerRetardsEtActivites(membresData, contribsData, depensesData);
+      membresData = snapshot.docs.map((item) => {
+        const data = item.data();
+        return {
+          id: item.id,
+          nom: data.nom || '',
+          prenom: data.prenom || '',
+          nomComplet: data.nomComplet || '',
+          statut: data.statut || 'ACTIF',
+        };
+      });
+      loaded.membres = true;
+      recalculer();
+    }, (error) => {
+      console.error('Erreur de chargement des membres du tableau de bord :', error);
+      loaded.membres = true;
+      recalculer();
     });
 
-    // 2. Écouter les contributions
     const unsubContribs = onSnapshot(collection(db, 'contributions'), (snapshot) => {
-      contribsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const totalC = contribsData.reduce((acc, curr) => acc + (Number(curr.montantVerse) || 0), 0);
-      setTotalContributions(totalC);
-      calculerRetardsEtActivites(membresData, contribsData, depensesData);
+      contributionsData = snapshot.docs.map((item) => {
+        const data = item.data();
+        return {
+          id: item.id,
+          membreId: data.membreId || '',
+          nombreMois: Number(data.nombreMois) || 0,
+          moisSelectionnes: Array.isArray(data.moisSelectionnes) ? data.moisSelectionnes : undefined,
+          moisCouverts: Array.isArray(data.moisCouverts) ? data.moisCouverts : undefined,
+          montantVerse: Number(data.montantVerse) || 0,
+          datePaiement: data.datePaiement || '',
+        };
+      });
+      loaded.contributions = true;
+      recalculer();
+    }, (error) => {
+      console.error('Erreur de chargement des contributions du tableau de bord :', error);
+      loaded.contributions = true;
+      recalculer();
     });
 
-    // 3. Écouter les dépenses
     const unsubDepenses = onSnapshot(collection(db, 'depenses'), (snapshot) => {
-      depensesData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const totalD = depensesData.reduce((acc, curr) => acc + (Number(curr.montant) || 0), 0);
-      setTotalDepenses(totalD);
-      calculerRetardsEtActivites(membresData, contribsData, depensesData);
+      depensesData = snapshot.docs.map((item) => {
+        const data = item.data();
+        return {
+          id: item.id,
+          montant: Number(data.montant) || 0,
+          dateDepense: data.dateDepense || '',
+          approuvePar: data.approuvePar || '',
+          motif: data.motif || '',
+        };
+      });
+      loaded.depenses = true;
+      recalculer();
+    }, (error) => {
+      console.error('Erreur de chargement des dépenses du tableau de bord :', error);
+      loaded.depenses = true;
+      recalculer();
+    });
+
+    const unsubPaiementsPenalites = onSnapshot(collection(db, 'paiements_penalites'), (snapshot) => {
+      paiementsPenalitesData = snapshot.docs.map((item) => {
+        const data = item.data();
+        return {
+          id: item.id,
+          membreId: data.membreId || '',
+          montant: Number(data.montant) || 0,
+          datePaiement: data.datePaiement || '',
+        };
+      });
+      loaded.paiements = true;
+      recalculer();
+    }, (error) => {
+      console.error('Erreur de chargement des paiements de pénalités :', error);
+      loaded.paiements = true;
+      recalculer();
+    });
+
+    const unsubConfig = onSnapshot(doc(db, 'settings', 'caisse_config'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        const montantPenalite = Number(data.montantPenalite ?? 1000);
+        caisseConfig = {
+          dateDebutCaisse: data.dateDebutCaisse || '2025-01-01',
+          penaliteRetardActive: data.penaliteRetardActive ?? true,
+          moisRetardAvantPenalite: Math.max(1, Number(data.moisRetardAvantPenalite) || 2),
+          montantPenalite: Number.isFinite(montantPenalite) ? montantPenalite : 1000,
+        };
+      }
+      loaded.config = true;
+      recalculer();
+    }, (error) => {
+      console.error('Erreur de chargement des paramètres du tableau de bord :', error);
+      loaded.config = true;
+      recalculer();
     });
 
     return () => {
       unsubMembres();
       unsubContribs();
       unsubDepenses();
+      unsubPaiementsPenalites();
+      unsubConfig();
     };
   }, []);
-
-  const calculerRetardsEtActivites = (membres: any[], contributions: any[], depenses: any[]) => {
-    if (membres.length === 0) return;
-
-    const moisActuel = new Date().getMonth() + 1;
-
-    // Calcul du nombre de membres en retard
-    let retardCount = 0;
-    membres.forEach((membre) => {
-      const memberContribs = contributions.filter((c) => c.membreId === membre.id);
-      const totalMoisPayes = memberContribs.reduce((sum, c) => sum + (Number(c.nombreMois) || 0), 0);
-      if (totalMoisPayes < moisActuel) {
-        retardCount++;
-      }
-    });
-    setMembresEnRetard(retardCount);
-
-    // Formater les contributions
-    const formattedContribs: ActiviteRecente[] = contributions.map((c) => {
-      const membreObj = membres.find((m) => m.id === c.membreId);
-      const nomMembre = membreObj 
-        ? (membreObj.nomComplet || `${membreObj.prenom || ''} ${membreObj.nom || ''}`.trim())
-        : 'Membre';
-
-      let dateStr = new Date().toISOString().split('T')[0];
-      if (c.datePaiement) {
-        dateStr = String(c.datePaiement).split('T')[0];
-      }
-
-      return {
-        id: c.id,
-        type: 'contribution',
-        membre: nomMembre,
-        montant: Number(c.montantVerse) || 0,
-        date: dateStr,
-        description: `Cotisation (${c.nombreMois || 1} mois)`,
-      };
-    });
-
-    // Formater les dépenses
-    const formattedDepenses: ActiviteRecente[] = depenses.map((d) => {
-      let dateStr = new Date().toISOString().split('T')[0];
-      if (d.dateDepense) {
-        dateStr = String(d.dateDepense).split('T')[0];
-      }
-
-      return {
-        id: d.id,
-        type: 'depense',
-        membre: d.approuvePar || 'Admin',
-        montant: Number(d.montant) || 0,
-        date: dateStr,
-        description: d.motif || 'Dépense caisse',
-      };
-    });
-
-    // Fusion correcte avec spread operator
-    const toutesActivites = [...formattedContribs, ...formattedDepenses].sort((a, b) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-
-    setActivitesRecentes(toutesActivites.slice(0, 5));
-    setIsLoading(false);
-  };
 
   const soldeActuel = totalContributions - totalDepenses;
   const tauxDepenses = totalContributions > 0 ? Math.round((totalDepenses / totalContributions) * 100) : 0;
@@ -177,7 +332,7 @@ export default function AdminDashboardPage() {
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total cotisations</span>
+            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total des entrées</span>
             <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
               <TrendingUp size={15} />
             </div>
@@ -185,7 +340,7 @@ export default function AdminDashboardPage() {
           <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-emerald-600 dark:text-emerald-400">
             +{totalContributions.toLocaleString()} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">FC</span>
           </p>
-          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Cumul des entrées</p>
+          <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Cotisations + pénalités payées</p>
         </div>
 
         {/* Total Dépenses */}
@@ -248,7 +403,7 @@ export default function AdminDashboardPage() {
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {activitesRecentes.map((act) => {
-              const estEntree = act.type === 'contribution';
+              const estEntree = act.type === 'entree';
               return (
                 <div
                   key={act.id}

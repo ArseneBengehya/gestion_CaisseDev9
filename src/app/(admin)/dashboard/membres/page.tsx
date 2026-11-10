@@ -344,7 +344,7 @@ export default function MembresPage() {
       {/* Tableau */}
       {isLoading ? (
         <div className="p-8 text-center text-slate-500">
-          Chargement des membres depuis Firestore...
+          Chargement des membres en cours...
         </div>
       ) : (
         <DataTable

@@ -47,7 +47,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
           <input
             type="text"
             required
-            placeholder="Ex. IV. Règles générales"
+            placeholder="Entrer le titre de la regle"
             value={titre}
             onChange={(e) => setTitre(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -61,7 +61,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
           <textarea
             required
             rows={5}
-            placeholder="Ex. Le respect mutuel est de rigueur...&#10;Les heures de réunions doivent être respectées..."
+            placeholder="Entrer les regles de cette section"
             value={contenu}
             onChange={(e) => setContenu(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"

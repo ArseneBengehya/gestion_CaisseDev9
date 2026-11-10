@@ -304,7 +304,7 @@ export default function EmpruntsPage() {
 
       {/* Tableau des emprunts */}
       {isLoading ? (
-        <div className="p-8 text-center text-slate-500">Chargement des emprunts...</div>
+        <div className="p-8 text-center text-slate-500">Chargement des emprunts en cours...</div>
       ) : (
         <DataTable
           data={emprunts}

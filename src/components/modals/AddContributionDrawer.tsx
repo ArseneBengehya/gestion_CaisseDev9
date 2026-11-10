@@ -2,7 +2,7 @@
 
 import { Membre } from '@/src/types';
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, User, Check, CheckCircle2 } from 'lucide-react';
+import { Calendar as CalendarIcon, User, Check, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import Modal from '../ui/Modal';
 
 interface AddContributionDrawerProps {
@@ -11,65 +11,92 @@ interface AddContributionDrawerProps {
   membres: Membre[];
   montantMensuelDefaut?: number;
   dateDebutCaisse?: string; // Ex: "2024-08-09"
-  onSubmit: (data: { 
-    membreId: string; 
-    nombreMois: number; 
-    moisSelectionnes: string[]; 
-    modePaiement: string; 
-    note: string 
+  moisDejaPayesParMembre?: Record<string, string[]>; // Ex: { membreId: ["2025-01", "2025-02"] }
+  onSubmit: (data: {
+    membreId: string;
+    nombreMois: number;
+    moisSelectionnes: string[];
+    modePaiement: string;
+    note: string;
   }) => void;
 }
+
+const MOIS_COURTS = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
+const MOIS_LONGS = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
+const makeKey = (year: number, monthIndex: number) =>
+  `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+
+const labelFromKey = (key: string) => {
+  const [y, m] = key.split('-').map(Number);
+  return `${MOIS_LONGS[m - 1]} ${y}`;
+};
 
 export default function AddContributionDrawer({
   isOpen,
   onClose,
   membres,
-  montantMensuelDefaut = 5000,
-  dateDebutCaisse = '2025-01-01',
+  montantMensuelDefaut = 0,
+  dateDebutCaisse = '',
+  moisDejaPayesParMembre = {},
   onSubmit,
 }: AddContributionDrawerProps) {
+  const startKey = dateDebutCaisse ? dateDebutCaisse.substring(0, 7) : '2025-01';
+  const startYear = parseInt(startKey.split('-')[0], 10);
+  const currentYear = new Date().getFullYear();
+  const maxYear = Math.max(currentYear, startYear) + 3;
+
   const [membreId, setMembreId] = useState('');
-  
-  // Extraction propre de l'année et du mois (ex: "2024-08-09" -> "2024-08")
-  const formatMoisAnnee = (dateStr: string) => {
-    if (!dateStr) return '2025-01';
-    return dateStr.substring(0, 7);
-  };
-
-  const minMoisCaisse = formatMoisAnnee(dateDebutCaisse);
-
-  const [moisDebut, setMoisDebut] = useState(minMoisCaisse);
-  const [nombreMois, setNombreMois] = useState(1);
+  const [annee, setAnnee] = useState(Math.max(startYear, currentYear));
+  const [selection, setSelection] = useState<string[]>([]);
   const [modePaiement, setModePaiement] = useState('CASH');
   const [note, setNote] = useState('');
 
-  // ⚠️ CRUCIAL : Met à jour le mois de début à chaque fois que le modal s'ouvre OU que la config Firestore change
+  const paidSet = new Set(moisDejaPayesParMembre[membreId] ?? []);
+
+  // Réinitialisation à chaque ouverture du modal
   useEffect(() => {
-    if (dateDebutCaisse) {
-      const nouveauMin = formatMoisAnnee(dateDebutCaisse);
-      setMoisDebut(nouveauMin);
+    if (isOpen) {
+      setMembreId('');
+      setSelection([]);
+      setModePaiement('CASH');
+      setNote('');
+      setAnnee(Math.max(startYear, currentYear));
     }
-  }, [isOpen, dateDebutCaisse]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
-  // Génération des mois payés
-  const genererMoisCouverts = () => {
-    if (!moisDebut) return [];
-    const [yearStr, monthStr] = moisDebut.split('-');
-    let year = parseInt(yearStr, 10);
-    let month = parseInt(monthStr, 10) - 1;
+  // Au changement de membre : on vide la sélection et on affiche l'année du premier mois impayé
+  useEffect(() => {
+    setSelection([]);
+    if (!membreId) return;
 
-    const result: string[] = [];
-    for (let i = 0; i < nombreMois; i++) {
-      const date = new Date(year, month + i, 1);
-      const mStr = String(date.getMonth() + 1).padStart(2, '0');
-      const yStr = date.getFullYear();
-      const moisNom = date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-      result.push(`${yStr}-${mStr} (${moisNom})`);
+    const paid = new Set(moisDejaPayesParMembre[membreId] ?? []);
+    let y = startYear;
+    let m = parseInt(startKey.split('-')[1], 10) - 1;
+
+    for (let i = 0; i < 600; i++) {
+      if (!paid.has(makeKey(y, m))) break;
+      m++;
+      if (m > 11) {
+        m = 0;
+        y++;
+      }
     }
-    return result;
+    setAnnee(Math.min(y, maxYear));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membreId]);
+
+  const toggleMois = (key: string) => {
+    setSelection((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key].sort()
+    );
   };
 
-  const moisCouverts = genererMoisCouverts();
+  const nombreMois = selection.length;
   const montantTotal = nombreMois * montantMensuelDefaut;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -78,22 +105,21 @@ export default function AddContributionDrawer({
       alert('Veuillez sélectionner un membre.');
       return;
     }
-
-    if (moisDebut < minMoisCaisse) {
-      alert(`Impossible de choisir un mois antérieur au lancement de la caisse (${minMoisCaisse}).`);
+    if (selection.length === 0) {
+      alert('Veuillez sélectionner au moins un mois à payer.');
       return;
     }
 
     onSubmit({
       membreId,
       nombreMois,
-      moisSelectionnes: moisCouverts,
+      moisSelectionnes: selection,
       modePaiement,
       note,
     });
 
     setMembreId('');
-    setNombreMois(1);
+    setSelection([]);
     setModePaiement('CASH');
     setNote('');
     onClose();
@@ -101,7 +127,7 @@ export default function AddContributionDrawer({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Enregistrer une Contribution">
-      <form onSubmit={handleSubmit} className="space-y-5 p-1">
+      <form onSubmit={handleSubmit} className="space-y-4 p-1">
         {/* Sélection du Membre */}
         <div>
           <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -114,70 +140,114 @@ export default function AddContributionDrawer({
             required
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           >
-            <option value="">-- Choisir un membre --</option>
+            <option value="">Choisir un membre</option>
             {membres.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.nomComplet || `${m.prenom} ${m.nom}`} ({m.telephone})
+                {m.nomComplet || `${m.prenom} ${m.nom}`}
               </option>
             ))}
           </select>
         </div>
 
-        {/* Choix du Mois de début & Nombre de mois */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+        {/* Grille des mois (compacte) */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
               <CalendarIcon size={14} className="text-blue-500" />
-              À partir du mois de :
+              Choisir les mois à payer
             </label>
-            <input
-              type="month"
-              value={moisDebut}
-              min={minMoisCaisse} 
-              onChange={(e) => setMoisDebut(e.target.value)}
-              required
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            />
-            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              Début de la caisse : <span className="font-semibold text-blue-600 dark:text-blue-400">{minMoisCaisse}</span>
-            </p>
+
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setAnnee((a) => Math.max(startYear, a - 1))}
+                disabled={annee <= startYear}
+                className="rounded-md p-1 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Année précédente"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="min-w-[3rem] text-center text-sm font-bold text-slate-900 dark:text-white">{annee}</span>
+              <button
+                type="button"
+                onClick={() => setAnnee((a) => Math.min(maxYear, a + 1))}
+                disabled={annee >= maxYear}
+                className="rounded-md p-1 text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-300 dark:hover:bg-slate-800"
+                aria-label="Année suivante"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Nombre de mois
-            </label>
-            <input
-              type="number"
-              placeholder="Entrer le nombre de mois"
-              min="1"
-              value={nombreMois}
-              onChange={(e) => setNombreMois(Math.max(1, parseInt(e.target.value) || 1))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            />
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+            {MOIS_COURTS.map((nom, i) => {
+              const key = makeKey(annee, i);
+              const dejaPaye = !!membreId && paidSet.has(key);
+              const avantDebut = key < startKey;
+              const choisi = selection.includes(key);
+              const disabled = !membreId || dejaPaye || avantDebut;
+
+              let style =
+                'border-slate-200 bg-white text-slate-800 hover:border-blue-400 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800';
+              if (choisi) {
+                style = 'border-blue-600 bg-blue-600 text-white shadow-sm dark:border-blue-500 dark:bg-blue-600';
+              } else if (dejaPaye) {
+                style =
+                  'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-500';
+              } else if (avantDebut || !membreId) {
+                style =
+                  'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-600';
+              }
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => toggleMois(key)}
+                  title={dejaPaye ? 'Déjà payé' : avantDebut ? 'Avant le lancement de la caisse' : labelFromKey(key)}
+                  className={`flex h-8 items-center justify-center gap-1 rounded-lg border px-1.5 text-xs font-semibold transition ${style}`}
+                >
+                  {nom}
+                  {dejaPaye && <Check size={11} className="shrink-0" />}
+                </button>
+              );
+            })}
           </div>
+
+          <p className="mt-2 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+            {membreId
+              ? 'En gris : mois déjà payés (✓) ou antérieurs au lancement de la caisse.'
+              : 'Sélectionnez d’abord un membre pour voir les mois disponibles.'}{' '}
+            Début de la caisse : <span className="font-semibold text-blue-600 dark:text-blue-400">{labelFromKey(startKey)}</span>
+          </p>
         </div>
 
-        {/* Aperçu sous forme de Badges des mois couverts */}
+        {/* Aperçu des mois choisis */}
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Mois qui seront marqués comme PAYÉS :
+            Mois qui seront marqués comme PAYÉS ({nombreMois}) :
           </label>
-          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 rounded-xl border border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
-            {moisCouverts.map((mois, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50"
-              >
-                <Check size={12} className="text-blue-600 dark:text-blue-400" />
-                {mois}
-              </span>
-            ))}
+          <div className="flex max-h-20 min-h-[2.5rem] flex-wrap gap-1.5 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-900/50">
+            {selection.length === 0 ? (
+              <span className="px-1 py-0.5 text-xs text-slate-400">Aucun mois sélectionné.</span>
+            ) : (
+              selection.map((key) => (
+                <span
+                  key={key}
+                  className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:border-blue-800/50 dark:bg-blue-950/80 dark:text-blue-300"
+                >
+                  <Check size={11} className="text-blue-600 dark:text-blue-400" />
+                  {labelFromKey(key)}
+                </span>
+              ))
+            )}
           </div>
         </div>
 
-        {/* Affichage automatique du montant calculé */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+        {/* Montant calculé */}
+        <div className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-500/20 dark:bg-emerald-500/10">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
               Montant total à verser :
@@ -199,7 +269,8 @@ export default function AddContributionDrawer({
           </button>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            disabled={selection.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
             <CheckCircle2 size={16} />
             Valider le versement
