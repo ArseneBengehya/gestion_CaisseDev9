@@ -70,9 +70,7 @@ export async function getContributionsByMembreId(membreId: string): Promise<Cont
         montantTotal: montant,
         moisCouverts: Array.isArray(data.moisCouverts)
           ? data.moisCouverts
-          : nombreMois > 0
-            ? Array.from({ length: nombreMois }, (_, index) => `Mois ${index + 1}`)
-            : [],
+          : [],
         datePaiement: data.datePaiement || new Date().toISOString().split("T")[0],
       } as Contribution);
     });

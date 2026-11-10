@@ -1,14 +1,20 @@
 'use client';
 
 import { Membre } from '@/src/types';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar as CalendarIcon, User, Check, CheckCircle2 } from 'lucide-react';
 import Modal from '../ui/Modal';
+import {
+  ContributionMonthRecord,
+  DATE_DEBUT_CAISSE_PAR_DEFAUT,
+  obtenirMoisCouvertsParContributions,
+} from '@/src/lib/contribution-months';
 
 interface AddContributionDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   membres: Membre[];
+  contributions: ContributionMonthRecord[];
   montantMensuelDefaut?: number;
   dateDebutCaisse?: string; // Ex: "2024-08-09"
   onSubmit: (data: { 
@@ -24,8 +30,9 @@ export default function AddContributionDrawer({
   isOpen,
   onClose,
   membres,
+  contributions,
   montantMensuelDefaut = 5000,
-  dateDebutCaisse = '2025-01-01',
+  dateDebutCaisse = DATE_DEBUT_CAISSE_PAR_DEFAUT,
   onSubmit,
 }: AddContributionDrawerProps) {
   const [membreId, setMembreId] = useState('');
@@ -43,30 +50,48 @@ export default function AddContributionDrawer({
   const [modePaiement, setModePaiement] = useState('CASH');
   const [note, setNote] = useState('');
 
-  // ⚠️ CRUCIAL : Met à jour le mois de début à chaque fois que le modal s'ouvre OU que la config Firestore change
-  useEffect(() => {
-    if (dateDebutCaisse) {
-      const nouveauMin = formatMoisAnnee(dateDebutCaisse);
-      setMoisDebut(nouveauMin);
+  const moisDejaPayes = useMemo(() => {
+    const contributionsMembre = contributions.filter((contribution) => contribution.membreId === membreId);
+    return new Set(obtenirMoisCouvertsParContributions(contributionsMembre, dateDebutCaisse).flat());
+  }, [contributions, dateDebutCaisse, membreId]);
+
+  const premierMoisImpayé = useMemo(() => {
+    let mois = minMoisCaisse;
+    while (moisDejaPayes.has(mois)) {
+      const [annee, numeroMois] = mois.split('-').map(Number);
+      const date = new Date(annee, numeroMois, 1);
+      mois = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     }
-  }, [isOpen, dateDebutCaisse]);
+    return mois;
+  }, [minMoisCaisse, moisDejaPayes]);
+
+  useEffect(() => {
+    if (isOpen) setMoisDebut(premierMoisImpayé);
+  }, [isOpen, premierMoisImpayé]);
 
   // Génération des mois payés
   const genererMoisCouverts = () => {
     if (!moisDebut) return [];
     const [yearStr, monthStr] = moisDebut.split('-');
-    let year = parseInt(yearStr, 10);
-    let month = parseInt(monthStr, 10) - 1;
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10) - 1;
 
     const result: string[] = [];
-    for (let i = 0; i < nombreMois; i++) {
-      const date = new Date(year, month + i, 1);
+    let index = 0;
+    while (result.length < nombreMois) {
+      const date = new Date(year, month + index, 1);
       const mStr = String(date.getMonth() + 1).padStart(2, '0');
       const yStr = date.getFullYear();
-      const moisNom = date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-      result.push(`${yStr}-${mStr} (${moisNom})`);
+      const key = `${yStr}-${mStr}`;
+      if (!moisDejaPayes.has(key)) result.push(key);
+      index++;
     }
     return result;
+  };
+
+  const formaterMois = (mois: string) => {
+    const [year, month] = mois.split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
   };
 
   const moisCouverts = genererMoisCouverts();
@@ -170,7 +195,7 @@ export default function AddContributionDrawer({
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50"
               >
                 <Check size={12} className="text-blue-600 dark:text-blue-400" />
-                {mois}
+                {formaterMois(mois)}
               </span>
             ))}
           </div>

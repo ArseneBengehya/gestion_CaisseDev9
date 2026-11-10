@@ -7,6 +7,11 @@ import DataTable, { Column } from '@/src/components/ui/DataTable';
 import AddContributionDrawer from '@/src/components/modals/AddContributionDrawer';
 import ViewHistoriqueModal from '@/src/components/modals/ViewHistoriqueModal';
 import Toast from '@/src/components/ui/Toast';
+import {
+  ContributionMonthRecord,
+  DATE_DEBUT_CAISSE_PAR_DEFAUT,
+  obtenirMoisCouvertsParContributions,
+} from '@/src/lib/contribution-months';
 
 // Import Firestore
 import {
@@ -18,7 +23,7 @@ import {
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
 
-interface ContributionDoc {
+interface ContributionDoc extends ContributionMonthRecord {
   id: string;
   membreId: string;
   nombreMois: number;
@@ -35,7 +40,7 @@ export default function ContributionsPage() {
   
   // Paramètres globaux de la caisse (récupérés depuis Firestore)
   const [caisseConfig, setCaisseConfig] = useState({
-    dateDebutCaisse: '2025-01-01',
+    dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT,
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
   });
@@ -65,7 +70,7 @@ export default function ContributionsPage() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setCaisseConfig({
-          dateDebutCaisse: data.dateDebutCaisse || '2025-01-01',
+          dateDebutCaisse: data.dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT,
           cotisationMensuelle: data.cotisationMensuelle || 5000,
           cotisationMoisSpecial: data.cotisationMoisSpecial || 10000,
         });
@@ -138,7 +143,9 @@ export default function ContributionsPage() {
       const montantTotalCotise = memberContribs.reduce((sum, c) => sum + (c.montantVerse || 0), 0);
       
       // Cumul du nombre de mois payés
-      const totalMoisPayes = memberContribs.reduce((sum, c) => sum + (c.nombreMois || 0), 0);
+      const totalMoisPayes = new Set(
+        obtenirMoisCouvertsParContributions(memberContribs, caisseConfig.dateDebutCaisse).flat()
+      ).size;
 
       // Calcul de la dette actuelle (Mois attendus - Mois payés * montant mensuel, minimum 0)
       const moisEnRetard = Math.max(0, moisAttendus - totalMoisPayes);
@@ -330,6 +337,7 @@ export default function ContributionsPage() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         membres={membres}
+        contributions={rawContributions}
         dateDebutCaisse={caisseConfig.dateDebutCaisse}
         montantMensuelDefaut={caisseConfig.cotisationMensuelle}
         onSubmit={handleAddContribution}

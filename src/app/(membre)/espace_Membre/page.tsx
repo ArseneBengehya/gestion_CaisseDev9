@@ -19,6 +19,11 @@ import {
   ArrowDownRight,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import {
+  DATE_DEBUT_CAISSE_PAR_DEFAUT,
+  normaliserDateFirestore,
+  obtenirMoisCouvertsParContributions,
+} from "@/src/lib/contribution-months";
 
 interface LoanRow {
   id: string;
@@ -63,7 +68,7 @@ export default function EspaceMembrePage() {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [memberContributions, setMemberContributions] = useState<ContributionRow[]>([]);
   const [loans, setLoans] = useState<LoanRow[]>([]);
-  const [config, setConfig] = useState({ dateDebutCaisse: "2025-01-01", cotisationMensuelle: 5000 });
+  const [config, setConfig] = useState({ dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT, cotisationMensuelle: 5000 });
   const [movements, setMovements] = useState<MovementRow[]>([]);
   const [monthModal, setMonthModal] = useState<"paid" | "unpaid" | "advance" | null>(null);
   const [loanModal, setLoanModal] = useState(false);
@@ -81,7 +86,7 @@ export default function EspaceMembrePage() {
       if (snapshot.exists()) {
         const data = snapshot.data();
         setConfig({
-          dateDebutCaisse: data.dateDebutCaisse || "2025-01-01",
+          dateDebutCaisse: data.dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT,
           cotisationMensuelle: Number(data.cotisationMensuelle || 5000),
         });
       }
@@ -93,7 +98,7 @@ export default function EspaceMembrePage() {
       setMemberContributions(rows.filter((row) => row.membreId === session.id));
       setMovements((current) => [
         ...current.filter((item) => item.type !== "contribution"),
-        ...rows.map((row): MovementRow => ({ id: row.id, type: "contribution", date: row.datePaiement || "", amount: Number(row.montantVerse || row.montantTotal || 0), label: "Contribution enregistrée" })),
+        ...rows.map((row): MovementRow => ({ id: row.id, type: "contribution", date: normaliserDateFirestore(row.datePaiement), amount: Number(row.montantVerse || row.montantTotal || 0), label: "Contribution enregistrée" })),
       ]);
     }));
 
@@ -102,7 +107,7 @@ export default function EspaceMembrePage() {
       setTotalExpenses(rows.reduce((sum, row) => sum + Number(row.montant || 0), 0));
       setMovements((current) => [
         ...current.filter((item) => item.type !== "depense"),
-        ...rows.map((row): MovementRow => ({ id: row.id, type: "depense", date: row.dateDepense || "", amount: Number(row.montant || 0), label: `Dépense : ${row.motif || "Sans motif"}` })),
+        ...rows.map((row): MovementRow => ({ id: row.id, type: "depense", date: normaliserDateFirestore(row.dateDepense), amount: Number(row.montant || 0), label: `Dépense : ${row.motif || "Sans motif"}` })),
       ]);
     }));
 
@@ -111,7 +116,7 @@ export default function EspaceMembrePage() {
       setLoans(rows);
       setMovements((current) => [
         ...current.filter((item) => item.type !== "emprunt"),
-        ...rows.map((row): MovementRow => ({ id: row.id, type: "emprunt", date: row.dateEmprunt || "", amount: Number(row.montantEmprunte || 0), label: `Emprunt ${row.statut || ""}` })),
+        ...rows.map((row): MovementRow => ({ id: row.id, type: "emprunt", date: normaliserDateFirestore(row.dateEmprunt), amount: Number(row.montantEmprunte || 0), label: `Emprunt ${row.statut || ""}` })),
       ]);
     }));
 
@@ -130,25 +135,7 @@ export default function EspaceMembrePage() {
   }, []);
 
   const months = useMemo(() => {
-    const paidKeys = new Set<string>();
-    memberContributions.forEach((row) => {
-      if (Array.isArray(row.moisCouverts)) {
-        row.moisCouverts.forEach((month: string) => {
-          const key = month.match(/^\d{4}-\d{2}/)?.[0];
-          if (key) paidKeys.add(key);
-        });
-      } else {
-        const count = Number(row.nombreMois || row.nombreMoisPayes || 0);
-        const dateSource = row.datePaiement && !Number.isNaN(new Date(row.datePaiement).getTime())
-          ? row.datePaiement
-          : config.dateDebutCaisse;
-        let cursor = new Date(`${dateSource.slice(0, 10)}T00:00:00`);
-        for (let index = 0; index < count; index++) {
-          paidKeys.add(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
-          cursor.setMonth(cursor.getMonth() + 1);
-        }
-      }
-    });
+    const paidKeys = new Set(obtenirMoisCouvertsParContributions(memberContributions, config.dateDebutCaisse).flat());
 
     const formatMonth = (key: string) => new Date(`${key}-01T00:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
     const paid = [...paidKeys].sort().map(formatMonth);
@@ -173,7 +160,7 @@ export default function EspaceMembrePage() {
   const activeLoans = loans.filter((loan) => loan.statut !== "Remboursé");
   const activeLoanTotal = activeLoans.reduce((sum, loan) => sum + Number(loan.montantTotalARembourser ?? loan.montantEmprunte ?? 0), 0);
   const balance = totalContributions - totalExpenses;
-  const sortedMovements = [...movements].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()).slice(0, 10);
+  const sortedMovements = [...movements].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0)).slice(0, 10);
 
   if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
 
@@ -244,56 +231,7 @@ export default function EspaceMembrePage() {
           <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">Mes versements cumulés</p>
         </div>
 
-        {/* Mois payés */}
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mois payés</span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-              <CalendarCheck size={15} />
-            </div>
-          </div>
-          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-slate-500 dark:text-slate-400">
-            {months.paid.length} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">mois</span>
-          </p>
-          <button onClick={() => setMonthModal("paid")} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white cursor-pointer">
-            <Eye size={15} /> Voir les details 
-          </button>
-        </div>
-
-        {/* Mois impayés */}
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mois impayés</span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-              <CalendarX size={15} />
-            </div>
-          </div>
-          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-rose-600 dark:text-rose-400">
-            {months.unpaid.length} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">mois</span>
-          </p>
-          <button onClick={() => setMonthModal("unpaid")} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white">
-            <Eye size={12} /> Voir le détail
-          </button>
-        </div>
-
-        {/* Mois en avance */}
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-          <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mois en avance</span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-              <CalendarPlus size={15} />
-            </div>
-          </div>
-          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-amber-600 dark:text-amber-400">
-            {months.advance.length} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">mois</span>
-          </p>
-          <button onClick={() => setMonthModal("advance")} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white">
-            <Eye size={12} /> Voir le détail
-          </button>
-        </div>
+        
 
         {/* Emprunts actifs */}
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
@@ -304,11 +242,11 @@ export default function EspaceMembrePage() {
               <HandCoins size={15} />
             </div>
           </div>
-          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-blue-600 dark:text-blue-400">
-            {activeLoanTotal.toLocaleString()} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">FC</span>
+          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-black dark:text-slate-400">
+            {activeLoanTotal.toLocaleString()} <span className="text-xs font-normal text-black dark:text-slate-400">FC</span>
           </p>
-          <button onClick={() => setLoanModal(true)} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white">
-            <Eye size={12} /> Voir mes emprunts
+          <button onClick={() => setLoanModal(true)} className="inline-flex ml-63 gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white cursor-pointer">
+            <Eye size={16} /> 
           </button>
         </div>
       </div>

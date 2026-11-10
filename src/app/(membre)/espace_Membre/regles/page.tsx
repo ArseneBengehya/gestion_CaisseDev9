@@ -5,11 +5,12 @@ import { ShieldCheck, BookOpen, Calendar, AlertCircle, Loader2, Coins } from "lu
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../../../lib/firebase"; // Ajuste le chemin selon la profondeur
 import { RegleCaisse } from "../../../../types";
+import { DATE_DEBUT_CAISSE_PAR_DEFAUT } from "../../../../lib/contribution-months";
 
 export default function ReglesCaissePage() {
   const [regles, setRegles] = useState<RegleCaisse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [parametres, setParametres] = useState({ cotisationMensuelle: 5000, cotisationMoisSpecial: 10000, dateDebutCaisse: "2025-01-01" });
+  const [parametres, setParametres] = useState({ cotisationMensuelle: 5000, cotisationMoisSpecial: 10000, dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT });
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "settings", "caisse_config"), (snapshot) => {
@@ -22,7 +23,7 @@ export default function ReglesCaissePage() {
       setParametres({
         cotisationMensuelle: Number(data.cotisationMensuelle || 5000),
         cotisationMoisSpecial: Number(data.cotisationMoisSpecial || 10000),
-        dateDebutCaisse: data.dateDebutCaisse || "2025-01-01",
+        dateDebutCaisse: data.dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT,
       });
       const personnalisées = Array.isArray(data.reglesGroupe)
         ? data.reglesGroupe.map((regle: { id?: string; titre: string; contenu: string[] }) => ({
