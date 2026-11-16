@@ -69,33 +69,33 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
     };
   }, [photoPreview]);
 
-  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  // const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  //   const file = event.target.files?.[0];
+  //   event.target.value = '';
+  //   if (!file) return;
 
-    if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
-      setPhotoError('Format non accepté. Choisissez une image JPG, PNG ou WEBP.');
-      return;
-    }
-    if (file.size > MAX_PHOTO_SIZE_BYTES) {
-      setPhotoError('La photo est trop volumineuse. La taille maximale est de 5 Mo.');
-      return;
-    }
+  //   if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
+  //     setPhotoError('Format non accepté. Choisissez une image JPG, PNG ou WEBP.');
+  //     return;
+  //   }
+  //   if (file.size > MAX_PHOTO_SIZE_BYTES) {
+  //     setPhotoError('La photo est trop volumineuse. La taille maximale est de 5 Mo.');
+  //     return;
+  //   }
 
-    setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
-    setPhotoError('');
-    setSubmitError('');
-  };
+  //   setPhotoFile(file);
+  //   setPhotoPreview(URL.createObjectURL(file));
+  //   setPhotoError('');
+  //   setSubmitError('');
+  // };
 
-  const removePhoto = () => {
-    setPhotoFile(null);
-    setPhotoPreview('');
-    setPhotoError('');
-    setSubmitError('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  // const removePhoto = () => {
+  //   setPhotoFile(null);
+  //   setPhotoPreview('');
+  //   setPhotoError('');
+  //   setSubmitError('');
+  //   if (fileInputRef.current) fileInputRef.current.value = '';
+  // };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -155,7 +155,7 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
             onChange={(event) => setNomComplet(event.target.value)}
             required
             autoFocus
-            placeholder="Ex. Arsène Bengehya"
+            placeholder="Entrez le nom nu membre"
             className={inputClassName}
           />
         </div>
@@ -168,7 +168,7 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
               value={telephone}
               onChange={(event) => setTelephone(event.target.value)}
               required
-              placeholder="Ex. +243..."
+              placeholder="Tapez le numero"
               className={inputClassName}
             />
           </div>
@@ -178,14 +178,14 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="Ex. membre@gmail.com"
+              placeholder="Entrez l'email"
               className={inputClassName}
             />
           </div>
         </div>
 
         {/* Sélection du fichier image : aucun lien à saisir */}
-        <div>
+        {/* <div>
           <label className={labelClassName}>
             <span className="inline-flex items-center gap-1.5"><ImageIcon size={14} /> Photo de profil (facultative)</span>
           </label>
@@ -227,7 +227,7 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
             </div>
           </div>
           {photoError && <p role="alert" className="mt-2 text-xs font-medium text-rose-700 dark:text-rose-300">{photoError}</p>}
-        </div>
+        </div> */}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -237,31 +237,7 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
               <option value="ADMIN">Administrateur</option>
             </select>
           </div>
-          {/* <div>
-            <label className={labelClassName}><span className="inline-flex items-center gap-1.5"><Key size={14} /> Mot de passe généré</span></label>
-            <div className="flex gap-2">
-              <input type="text" value={motDePasse} readOnly className={`${inputClassName} font-mono font-bold`} />
-              <button
-                type="button"
-                onClick={() => setMotDePasse(generatePassword())}
-                className="shrink-0 rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                title="Régénérer le mot de passe"
-              >
-                ↻
-              </button>
-            </div>
-          </div> */}
         </div>
-{/* 
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 px-3 py-3 text-xs font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={envoyerWhatsApp}
-            onChange={(event) => setEnvoyerWhatsApp(event.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-500"
-          />
-          <span className="flex items-start gap-2"><Send size={14} className="mt-0.5 shrink-0 text-slate-500" /> Envoyer les identifiants d'accès par WhatsApp au membre</span>
-        </label> */}
 
         {submitError && (
           <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">

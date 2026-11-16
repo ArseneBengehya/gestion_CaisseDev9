@@ -10,10 +10,13 @@ import {
   Eye,
   CalendarX,
   CalendarPlus,
+  Wallet,
+  ShieldAlert,
 } from "lucide-react";
 import { Contribution } from "../../../../types";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
+import { Penalite, soldePenalite } from "../../../../lib/penalties";
 import {
   DATE_DEBUT_CAISSE_PAR_DEFAUT,
   normaliserDateFirestore,
@@ -53,8 +56,12 @@ const formaterDateHeure = (dateStr?: string) => {
 
 export default function TransactionsPage() {
   const [rawContributions, setRawContributions] = useState<Contribution[]>([]);
+  const [penalites, setPenalites] = useState<Penalite[]>([]);
   const [config, setConfig] = useState({ dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT, cotisationMensuelle: 5000 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isPenaltiesLoading, setIsPenaltiesLoading] = useState(true);
+  const [penaltiesLoadError, setPenaltiesLoadError] = useState(false);
+  const [activeTab, setActiveTab] = useState<"cotisations" | "penalites">("cotisations");
 
   // États pour le Modal de détails de transaction
   const [selectedContribution, setSelectedContribution] = useState<Contribution | null>(null);
@@ -68,6 +75,7 @@ export default function TransactionsPage() {
     const userStr = localStorage.getItem("caisse_user");
     if (!userStr) {
       setIsLoading(false);
+      setIsPenaltiesLoading(false);
       return;
     }
 
@@ -77,11 +85,13 @@ export default function TransactionsPage() {
     } catch (error) {
       console.error("Session membre invalide :", error);
       setIsLoading(false);
+      setIsPenaltiesLoading(false);
       return;
     }
 
     if (!session.id) {
       setIsLoading(false);
+      setIsPenaltiesLoading(false);
       return;
     }
 
@@ -124,9 +134,38 @@ export default function TransactionsPage() {
         setIsLoading(false);
     });
 
+      const penalitesQuery = query(
+        collection(db, "penalites"),
+        where("membreId", "==", session.id)
+      );
+      const unsubscribePenalites = onSnapshot(penalitesQuery, (snapshot) => {
+        setPenalites(snapshot.docs.map((penaliteDoc) => {
+          const data = penaliteDoc.data();
+          return {
+            id: penaliteDoc.id,
+            membreId: data.membreId || session.id!,
+            moisDeclenchement: Number(data.moisDeclenchement) || 0,
+            moisDeclenchementKey: data.moisDeclenchementKey || "",
+            montantDu: Number(data.montantDu) || 0,
+            montantPaye: Number(data.montantPaye) || 0,
+            statut: data.statut || "A_PAYER",
+            dateCreation: data.dateCreation || "",
+            dateDernierPaiement: data.dateDernierPaiement,
+          };
+        }));
+        setPenaltiesLoadError(false);
+        setIsPenaltiesLoading(false);
+      }, (error) => {
+        console.error("Erreur lors du chargement des pénalités Firestore :", error);
+        setPenalites([]);
+        setPenaltiesLoadError(true);
+        setIsPenaltiesLoading(false);
+      });
+
     return () => {
       unsubscribeConfig();
       unsubscribeContributions();
+        unsubscribePenalites();
     };
   }, []);
 
@@ -215,6 +254,45 @@ export default function TransactionsPage() {
     },
   ];
 
+  const penaltyColumns: Column<Penalite>[] = [
+    {
+      header: "Période déclenchée",
+      accessor: (item) => item.moisDeclenchementKey ? moisFrancais(item.moisDeclenchementKey) : "—",
+    },
+    {
+      header: "Montant dû",
+      accessor: (item) => <span className="font-semibold">{item.montantDu.toLocaleString("fr-FR")} FC</span>,
+    },
+    {
+      header: "Montant payé",
+      accessor: (item) => <span className="font-semibold text-emerald-700 dark:text-emerald-400">{item.montantPaye.toLocaleString("fr-FR")} FC</span>,
+    },
+    {
+      header: "Solde",
+      accessor: (item) => {
+        const solde = soldePenalite(item);
+        return <span className={`font-semibold ${solde > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-500"}`}>{solde.toLocaleString("fr-FR")} FC</span>;
+      },
+    },
+    {
+      header: "Statut",
+      accessor: (item) => {
+        const solde = soldePenalite(item);
+        const statut = solde === 0 ? "Payée" : item.montantPaye > 0 ? "En cours" : "En attente";
+        const className = solde === 0
+          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+          : item.montantPaye > 0
+            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+            : "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300";
+        return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{statut}</span>;
+      },
+    },
+  ];
+
+  const totalPenalitesDues = penalites.reduce((total, penalite) => total + penalite.montantDu, 0);
+  const totalPenalitesPayees = penalites.reduce((total, penalite) => total + penalite.montantPaye, 0);
+  const totalPenalitesRestantes = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
+
   if (isLoading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
@@ -226,6 +304,33 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-8 pb-6">
+      <div className="flex w-fit max-w-full rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+        <button
+          type="button"
+          onClick={() => setActiveTab("cotisations")}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+            activeTab === "cotisations"
+              ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400"
+          }`}
+        >
+          <Wallet size={15} /> Contributions
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("penalites")}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+            activeTab === "penalites"
+              ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400"
+          }`}
+        >
+          <ShieldAlert size={15} /> Pénalités
+        </button>
+      </div>
+
+      {activeTab === "cotisations" ? (
+        <>
       {/* 📊 CARTES KPI SYNCHRONISÉES AU-DESSUS DU TABLEAU */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Mois payés */}
@@ -319,6 +424,55 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <section className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mes pénalités</h1>
+            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+              Consultez les pénalités enregistrées et leur solde actuel.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {[
+              { label: "Total dû", value: totalPenalitesDues, color: "text-slate-900 dark:text-white" },
+              { label: "Total payé", value: totalPenalitesPayees, color: "text-emerald-600 dark:text-emerald-400" },
+              { label: "Solde restant", value: totalPenalitesRestantes, color: "text-rose-600 dark:text-rose-400" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+                <p className={`mt-2 text-xl font-extrabold tabular-nums ${item.color}`}>{item.value.toLocaleString("fr-FR")} <span className="text-xs font-normal text-slate-500">FC</span></p>
+              </div>
+            ))}
+          </div>
+
+          {isPenaltiesLoading ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">
+              <Loader2 size={18} className="animate-spin" /> Chargement de vos pénalités...
+            </div>
+          ) : penaltiesLoadError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+              Impossible de charger vos pénalités pour le moment.
+            </div>
+          ) : penalites.length > 0 ? (
+            <DataTable
+              data={[...penalites].sort((a, b) => b.moisDeclenchementKey.localeCompare(a.moisDeclenchementKey))}
+              columns={penaltyColumns}
+              searchKey="moisDeclenchementKey"
+              searchPlaceholder="Rechercher par période..."
+            />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+                <ShieldAlert size={24} />
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-slate-900 dark:text-white">Aucune pénalité enregistrée</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Votre situation est à jour.</p>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* 🪟 MODAL POUR LES LISTES DE MOIS (PAYÉS / IMPAYÉS / AVANCE) */}
       <Modal

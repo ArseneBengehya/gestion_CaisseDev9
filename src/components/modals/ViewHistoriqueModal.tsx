@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Calendar, CreditCard, FileText } from 'lucide-react';
+import { Calendar, CreditCard, Clock } from 'lucide-react';
 import { StatutMembreContribution } from '@/src/types';
 import Modal from '../ui/Modal';
 
@@ -19,6 +19,8 @@ export default function ViewHistoriqueModal({
   const [isFullScreen, setIsFullScreen] = useState(true); // Par défaut en plein écran comme demandé
 
   if (!data) return null;
+  const historyRows = [...(data.historiquePaiements || [])]
+    .sort((a, b) => Date.parse(b.datePaiement) - Date.parse(a.datePaiement) || b.mois.localeCompare(a.mois));
 
   return (
     <Modal
@@ -65,20 +67,31 @@ export default function ViewHistoriqueModal({
                   <th className="px-6 py-3">Mois Concerné</th>
                   <th className="px-6 py-3">Montant</th>
                   <th className="px-6 py-3">Mode de Paiement</th>
+                  <th className="px-6 py-3">Date et heure</th>
                   <th className="px-6 py-3">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-sm text-slate-700">
-                {data.moisPayes.map((mois, index) => (
-                  <tr key={index} className="hover:bg-slate-50 transition-colors">
+                {historyRows.map((paiement, index) => {
+                  const [year, month] = paiement.mois.split('-').map(Number);
+                  const moisLabel = year && month
+                    ? new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+                    : paiement.mois;
+                  return (
+                  <tr key={`${paiement.mois}-${paiement.datePaiement}-${index}`} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-medium flex items-center gap-2">
                       <Calendar size={16} className="text-blue-500" />
-                      {mois}
+                      {moisLabel}
                     </td>
-                    <td className="px-6 py-4 font-semibold text-emerald-600">5,000 FC</td>
+                    <td className="px-6 py-4 font-semibold text-emerald-600">{paiement.montant.toLocaleString('fr-FR')} FC</td>
                     <td className="px-6 py-4 flex items-center gap-1.5 text-slate-600">
                       <CreditCard size={16} className="text-slate-400" />
-                      Cash / Espèces
+                      {paiement.modePaiement}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-slate-600">
+                      {paiement.datePaiement
+                        ? <span className="inline-flex items-center gap-1.5"><Clock size={14} className="text-slate-400" />{new Date(paiement.datePaiement).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        : '—'}
                     </td>
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
@@ -86,7 +99,8 @@ export default function ViewHistoriqueModal({
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
