@@ -132,12 +132,13 @@ export default function TransactionsPage() {
 
   const cotisations = useMemo(() => {
     const moisParContribution = obtenirMoisCouvertsParContributions(rawContributions, config.dateDebutCaisse);
-    return rawContributions.flatMap<Contribution & { moisCouvertsText: string }>((contribution, index) => {
+    return rawContributions.flatMap<Contribution & { moisCouvertsText: string; moisCleTri: string }>((contribution, index) => {
       const moisCouverts = moisParContribution[index];
       if (!moisCouverts.length) {
         return [{
           ...contribution,
           moisCouverts: [],
+          moisCleTri: "",
           moisCouvertsText: `${contribution.nombreMois || contribution.nombreMoisPayes || ""} ${formaterDateHeure(contribution.datePaiement)}`,
         }];
       }
@@ -147,13 +148,14 @@ export default function TransactionsPage() {
         return {
           ...contribution,
           id: `${contribution.id}-${mois}`,
+          moisCleTri: mois,
           moisCouvertsText: `${libelleMois} ${mois}`,
           moisCouverts: [libelleMois],
           montantTotal: Number(contribution.montantVerse ?? contribution.montantTotal ?? 0) / moisCouverts.length,
           montantVerse: Number(contribution.montantVerse ?? contribution.montantTotal ?? 0) / moisCouverts.length,
         };
       });
-    });
+    }).sort((a, b) => b.moisCleTri.localeCompare(a.moisCleTri) || (Date.parse(b.datePaiement) || 0) - (Date.parse(a.datePaiement) || 0));
   }, [rawContributions, config.dateDebutCaisse]);
 
   // Calcul dynamique des mois payés, impayés et en avance (synchronisé avec le Dashboard)
@@ -163,7 +165,7 @@ export default function TransactionsPage() {
     const formatMonth = (key: string) => moisFrancais(key);
     const now = new Date();
     const moisCourant = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const paid = [...paidKeys].sort().map(formatMonth);
+    const paid = [...paidKeys].sort((a, b) => b.localeCompare(a)).map(formatMonth);
     
     const start = new Date(`${config.dateDebutCaisse}T00:00:00`);
     const due: string[] = [];
@@ -274,7 +276,7 @@ export default function TransactionsPage() {
             </div>
           </div>
           <div className="flex items-center justify-between mt-2">
-            <p className="whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight text-amber-600 dark:text-amber-400">
+            <p className="whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight text-slate-900 dark:text-white">
               {months.advance.length} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">mois</span>
             </p>
             <button onClick={() => setMonthModal("advance")} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer">

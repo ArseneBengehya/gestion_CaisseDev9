@@ -83,7 +83,7 @@ export default function MembresPage() {
         setIsLoading(false);
       },
       (error) => {
-        console.error('Erreur de lecture Firestore :', error);
+        console.error('Erreur de lecture :', error);
         setIsLoading(false);
         showToast('error', 'Impossible de charger la liste des membres.');
       }
@@ -351,7 +351,7 @@ export default function MembresPage() {
       {/* Tableau */}
       {isLoading ? (
         <div className="p-8 text-center text-slate-500">
-          Chargement des membres depuis Firestore...
+          Chargement des membres en cours
         </div>
       ) : (
         <DataTable

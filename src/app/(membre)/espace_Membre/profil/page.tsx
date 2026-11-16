@@ -14,27 +14,51 @@ import {
   Pencil,
   Save,
   Upload,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { getMembreByUid } from "../../../../services/dbService";
-import { Membre } from "../../../../types";
+import { Contribution, Membre } from "../../../../types";
 import Modal from "../../../../components/ui/Modal";
-import { doc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { uploadMemberPhoto } from "../../../../lib/member-photo";
+import {
+  DATE_DEBUT_CAISSE_PAR_DEFAUT,
+  obtenirMoisCouvertsParContributions,
+} from "../../../../lib/contribution-months";
 
 export default function ProfilPage() {
   const [membre, setMembre] = useState<Membre | null>(null);
+  const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [config, setConfig] = useState({ dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT, cotisationMensuelle: 5000 });
   const [isLoading, setIsLoading] = useState(true);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [nomComplet, setNomComplet] = useState("");
   const [telephone, setTelephone] = useState("");
   const [email, setEmail] = useState("");
+  const [motDePasseActuel, setMotDePasseActuel] = useState("");
+  const [nouveauMotDePasse, setNouveauMotDePasse] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
+    let active = true;
+    const unsubscribers: Array<() => void> = [];
+
+    unsubscribers.push(onSnapshot(doc(db, "settings", "caisse_config"), (snapshot) => {
+      if (!snapshot.exists()) return;
+      const data = snapshot.data();
+      setConfig({
+        dateDebutCaisse: data.dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT,
+        cotisationMensuelle: Number(data.cotisationMensuelle ?? 5000),
+      });
+    }));
+
     const loadProfile = async () => {
       const userStr = localStorage.getItem("caisse_user");
       if (!userStr) {
@@ -43,11 +67,32 @@ export default function ProfilPage() {
       }
       const session = JSON.parse(userStr);
       const dataMembre = await getMembreByUid(session.id);
-      if (dataMembre) setMembre(dataMembre);
+      if (!active) return;
+      if (dataMembre) {
+        setMembre(dataMembre);
+        unsubscribers.push(onSnapshot(doc(db, "membres", dataMembre.id), (snapshot) => {
+          if (snapshot.exists()) setMembre({ id: snapshot.id, ...snapshot.data() } as Membre);
+        }));
+        unsubscribers.push(onSnapshot(query(collection(db, "contributions"), where("membreId", "==", dataMembre.id)), (snapshot) => {
+          setContributions(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Contribution)));
+        }));
+      }
       setIsLoading(false);
     };
     loadProfile();
+
+    return () => {
+      active = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
   }, []);
+
+  const totalCotise = contributions.reduce((total, contribution) => total + Number(contribution.montantVerse ?? contribution.montantTotal ?? 0), 0);
+  const moisPayes = new Set(obtenirMoisCouvertsParContributions(contributions, config.dateDebutCaisse).flat()).size;
+  const maintenant = new Date();
+  const dateDebut = new Date(`${config.dateDebutCaisse}T00:00:00`);
+  const moisAttendus = Math.max(1, (maintenant.getFullYear() - dateDebut.getFullYear()) * 12 + maintenant.getMonth() - dateDebut.getMonth() + 1);
+  const detteActuelle = Math.max(0, moisAttendus - moisPayes) * config.cotisationMensuelle;
 
   const openEdit = () => {
     if (!membre) return;
@@ -55,6 +100,8 @@ export default function ProfilPage() {
     setNomComplet(membre.nomComplet || `${membre.prenom || ""} ${membre.nom || ""}`.trim());
     setTelephone(membre.telephone || "");
     setEmail(membre.email || "");
+    setMotDePasseActuel("");
+    setNouveauMotDePasse("");
     setPhotoPreview(membre.photoUrl || membre.avatarUrl || "");
     setPhotoFile(null);
     setSaveError("");
@@ -85,6 +132,20 @@ export default function ProfilPage() {
     setIsSaving(true);
     setSaveError("");
     try {
+      const changeMotDePasse = motDePasseActuel.length > 0 || nouveauMotDePasse.length > 0;
+      if (changeMotDePasse) {
+        if (!motDePasseActuel || !nouveauMotDePasse) {
+          setSaveError("Saisissez votre mot de passe actuel et votre nouveau mot de passe.");
+          return;
+        }
+
+        const membreSnapshot = await getDoc(doc(db, "membres", membre.id));
+        if (!membreSnapshot.exists() || membreSnapshot.data().motDePasse !== motDePasseActuel) {
+          setSaveError("Votre mot de passe actuel est incorrect.");
+          return;
+        }
+      }
+
       const parts = nomComplet.trim().split(/\s+/);
       const prenom = parts.shift() || "";
       const nom = parts.join(" ") || prenom;
@@ -97,6 +158,7 @@ export default function ProfilPage() {
         email: email.trim(),
         photoUrl,
         avatarUrl: photoUrl,
+        ...(changeMotDePasse ? { motDePasse: nouveauMotDePasse } : {}),
       });
       const updated = { ...membre, nomComplet: nomComplet.trim(), prenom, nom, telephone: telephone.trim(), email: email.trim(), photoUrl, avatarUrl: photoUrl };
       setMembre(updated);
@@ -254,12 +316,12 @@ export default function ProfilPage() {
             <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Statut de vos cotisations & finances</h3>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-1">
-                <p className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+              <div className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1.5">
                   <Wallet size={14} /> Total Cotisé
                 </p>
                 <p className="font-black text-emerald-900 dark:text-emerald-300 text-lg">
-                  {(membre?.montantTotalCotise || 0).toLocaleString()} FC
+                  {totalCotise.toLocaleString()} FC
                 </p>
               </div>
 
@@ -268,16 +330,16 @@ export default function ProfilPage() {
                   <CheckCircle2 size={14} /> Statut Cotisation
                 </p>
                 <p className="font-bold text-slate-900 dark:text-white text-base">
-                  {membre?.statutCotisation || "À jour"}
+                  {detteActuelle > 0 ? "Pas à jour" : "A jour"}
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 space-y-1">
-                <p className="text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1.5">
+              <div className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 space-y-1">
+                <p className="text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1.5">
                   <Clock size={14} /> Dette / Solde
                 </p>
-                <p className="font-black text-amber-900 dark:text-amber-300 text-lg">
-                  {(membre?.detteActuelle || 0).toLocaleString()} FC
+                <p className="font-black text-slate-900 dark:text-white text-lg">
+                  {detteActuelle.toLocaleString()} FC
                 </p>
               </div>
             </div>
@@ -310,6 +372,26 @@ export default function ProfilPage() {
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300">Adresse e-mail</label>
               <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300">Mot de passe actuel</label>
+              <div className="relative">
+                <input type={showCurrentPassword ? "text" : "password"} autoComplete="current-password" value={motDePasseActuel} onChange={(event) => setMotDePasseActuel(event.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 pl-3.5 pr-10 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder="Entrez votre mot de passe actuel"/>
+                <button type="button" onClick={() => setShowCurrentPassword((visible) => !visible)} aria-label={showCurrentPassword ? "Masquer le mot de passe actuel" : "Afficher le mot de passe actuel"} title={showCurrentPassword ? "Masquer" : "Afficher"} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200">
+                  {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300">Nouveau mot de passe</label>
+              <div className="relative">
+                <input type={showNewPassword ? "text" : "password"} autoComplete="new-password" value={nouveauMotDePasse} onChange={(event) => setNouveauMotDePasse(event.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 pl-3.5 pr-10 text-sm dark:border-slate-700 dark:bg-slate-950" placeholder="Entrez votre nouveau mot de passe"/>
+                <button type="button" onClick={() => setShowNewPassword((visible) => !visible)} aria-label={showNewPassword ? "Masquer le nouveau mot de passe" : "Afficher le nouveau mot de passe"} title={showNewPassword ? "Masquer" : "Afficher"} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200">
+                  {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+            </div>
             </div>
           </div>
           <button type="submit" disabled={isSaving} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white dark:bg-blue-600">

@@ -276,7 +276,12 @@ export default function EspaceMembrePage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{movement.label}</p>
                       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {movement.date ? new Date(movement.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "Date non disponible"}
+                        {movement.date ? (() => {
+                          const date = new Date(movement.date);
+                          const dateAffichee = date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+                          const contientHeure = /T\d{2}:\d{2}/.test(movement.date);
+                          return `${dateAffichee} à ${contientHeure ? date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "heure non renseignée"}`;
+                        })() : "Date non disponible"}
                       </p>
                     </div>
                   </div>
