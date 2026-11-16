@@ -29,6 +29,8 @@ interface LoanRow {
   id: string;
   montantEmprunte: number;
   montantTotalARembourser: number;
+  montantPaye?: number;
+  montantRestant?: number;
   dateEmprunt: string;
   dateEcheance: string;
   statut: string;
@@ -53,9 +55,15 @@ interface ExpenseRow {
   motif?: string;
 }
 
+interface LoanPaymentRow {
+  id: string;
+  datePaiement?: unknown;
+  montantVerse?: number;
+}
+
 interface MovementRow {
   id: string;
-  type: "contribution" | "depense" | "emprunt";
+  type: "contribution" | "depense" | "emprunt" | "remboursement";
   date: string;
   amount: number;
   label: string;
@@ -66,6 +74,9 @@ export default function EspaceMembrePage() {
   const [name, setName] = useState("Membre");
   const [totalContributions, setTotalContributions] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [totalLoansIssued, setTotalLoansIssued] = useState(0);
+  const [totalLoanRepayments, setTotalLoanRepayments] = useState(0);
+  const [totalPenaltyPayments, setTotalPenaltyPayments] = useState(0);
   const [memberContributions, setMemberContributions] = useState<ContributionRow[]>([]);
   const [loans, setLoans] = useState<LoanRow[]>([]);
   const [config, setConfig] = useState({ dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT, cotisationMensuelle: 5000 });
@@ -111,12 +122,38 @@ export default function EspaceMembrePage() {
       ]);
     }));
 
+    unsubscribers.push(onSnapshot(collection(db, "emprunts"), (snapshot) => {
+      setTotalLoansIssued(snapshot.docs.reduce((sum, item) => sum + (Number(item.data().montantEmprunte) || 0), 0));
+    }));
+
+    unsubscribers.push(onSnapshot(collection(db, "paiements_emprunts"), (snapshot) => {
+      setTotalLoanRepayments(snapshot.docs.reduce((sum, item) => sum + (Number(item.data().montantVerse) || 0), 0));
+    }));
+
+    unsubscribers.push(onSnapshot(collection(db, "paiements_penalites"), (snapshot) => {
+      setTotalPenaltyPayments(snapshot.docs.reduce((sum, item) => sum + (Number(item.data().montantVerse) || 0), 0));
+    }));
+
     unsubscribers.push(onSnapshot(query(collection(db, "emprunts"), where("membreId", "==", session.id)), (snapshot) => {
       const rows = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as LoanRow));
       setLoans(rows);
       setMovements((current) => [
         ...current.filter((item) => item.type !== "emprunt"),
         ...rows.map((row): MovementRow => ({ id: row.id, type: "emprunt", date: normaliserDateFirestore(row.dateEmprunt), amount: Number(row.montantEmprunte || 0), label: `Emprunt ${row.statut || ""}` })),
+      ]);
+    }));
+
+    unsubscribers.push(onSnapshot(query(collection(db, "paiements_emprunts"), where("membreId", "==", session.id)), (snapshot) => {
+      const rows = snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as LoanPaymentRow));
+      setMovements((current) => [
+        ...current.filter((item) => item.type !== "remboursement"),
+        ...rows.map((row): MovementRow => ({
+          id: row.id,
+          type: "remboursement",
+          date: normaliserDateFirestore(row.datePaiement),
+          amount: Number(row.montantVerse || 0),
+          label: "Remboursement d’emprunt",
+        })),
       ]);
     }));
 
@@ -157,9 +194,13 @@ export default function EspaceMembrePage() {
   }, [memberContributions, config]);
 
   const memberTotal = memberContributions.reduce((sum, row) => sum + Number(row.montantVerse ?? row.montantTotal ?? 0), 0);
-  const activeLoans = loans.filter((loan) => loan.statut !== "Remboursé");
-  const activeLoanTotal = activeLoans.reduce((sum, loan) => sum + Number(loan.montantTotalARembourser ?? loan.montantEmprunte ?? 0), 0);
-  const balance = totalContributions - totalExpenses;
+  const soldeEmprunt = (loan: LoanRow) => Number(
+    loan.montantRestant ??
+    (loan.statut === "Remboursé" || loan.statut === "À jour" ? 0 : loan.montantTotalARembourser ?? loan.montantEmprunte ?? 0)
+  );
+  const activeLoans = loans.filter((loan) => soldeEmprunt(loan) > 0);
+  const activeLoanTotal = activeLoans.reduce((sum, loan) => sum + soldeEmprunt(loan), 0);
+  const balance = totalContributions + totalLoanRepayments + totalPenaltyPayments - totalExpenses - totalLoansIssued;
   const sortedMovements = [...movements].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0)).slice(0, 10);
 
   if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
@@ -266,7 +307,7 @@ export default function EspaceMembrePage() {
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {sortedMovements.length ? (
             sortedMovements.map((movement) => {
-              const isExpense = movement.type === "depense";
+              const isExpense = movement.type === "depense" || movement.type === "emprunt";
               return (
                 <div key={`${movement.type}-${movement.id}`} className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 dark:hover:bg-slate-800/40">
                   <div className="flex min-w-0 items-center gap-3">
@@ -276,7 +317,7 @@ export default function EspaceMembrePage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{movement.label}</p>
                       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {movement.date ? new Date(movement.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "Date non disponible"}
+                        {movement.date ? new Date(movement.date).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Date non disponible"}
                       </p>
                     </div>
                   </div>
@@ -316,6 +357,8 @@ export default function EspaceMembrePage() {
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <span>Total à rembourser : <b className="text-slate-700 dark:text-slate-200">{Number(loan.montantTotalARembourser || 0).toLocaleString()} FC</b></span>
+                  <span>Déjà payé : <b className="text-emerald-700 dark:text-emerald-300">{Number(loan.montantPaye || 0).toLocaleString()} FC</b></span>
+                  <span>Reste à payer : <b className="text-slate-700 dark:text-slate-200">{Number(loan.montantRestant ?? loan.montantTotalARembourser ?? 0).toLocaleString()} FC</b></span>
                   <span>Échéance : <b className="text-slate-700 dark:text-slate-200">{loan.dateEcheance || "-"}</b></span>
                 </div>
               </div>

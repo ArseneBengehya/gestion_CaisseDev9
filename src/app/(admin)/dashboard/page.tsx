@@ -13,12 +13,19 @@ import {
 import Link from 'next/link';
 
 // Import Firestore
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import {
+  DATE_DEBUT_CAISSE_PAR_DEFAUT,
+  moisImpayesPour,
+  normaliserDateFirestore,
+  nombreMoisAttendus,
+} from '@/src/lib/contribution-months';
 
 interface ActiviteRecente {
   id: string;
-  type: 'contribution' | 'depense';
+  type: 'contribution' | 'depense' | 'penalite' | 'emprunt' | 'remboursement' | 'membre';
+  direction: 'entree' | 'sortie' | 'aucune';
   membre: string;
   montant: number;
   date: string;
@@ -28,6 +35,8 @@ interface ActiviteRecente {
 export default function AdminDashboardPage() {
   const [totalContributions, setTotalContributions] = useState(0);
   const [totalDepenses, setTotalDepenses] = useState(0);
+  const [totalAutresEntrees, setTotalAutresEntrees] = useState(0);
+  const [totalEmpruntsAccordes, setTotalEmpruntsAccordes] = useState(0);
   const [membresActifs, setMembresActifs] = useState(0);
   const [membresEnRetard, setMembresEnRetard] = useState(0);
   const [activitesRecentes, setActivitesRecentes] = useState<ActiviteRecente[]>([]);
@@ -36,52 +45,113 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let membresData: any[] = [];
     let contribsData: any[] = [];
+    let contributionsSpecialesData: any[] = [];
     let depensesData: any[] = [];
+    let empruntsData: any[] = [];
+    let paiementsEmpruntsData: any[] = [];
+    let paiementsPenalitesData: any[] = [];
+    let dateDebutCaisse = DATE_DEBUT_CAISSE_PAR_DEFAUT;
+    const toutesContributions = () => [
+      ...contribsData,
+      ...contributionsSpecialesData.map((contribution) => ({
+        ...contribution,
+        typeContribution: 'MOIS_SPECIAL',
+        nombreMois: 1,
+        moisCouverts: contribution.moisSpecial ? [contribution.moisSpecial] : [],
+      })),
+    ];
+    const actualiserTotalContributions = () => {
+      setTotalContributions(
+        toutesContributions().reduce((acc, contribution) => acc + (Number(contribution.montantVerse) || 0), 0)
+      );
+    };
 
     // 1. Écouter les membres
     const unsubMembres = onSnapshot(collection(db, 'membres'), (snapshot) => {
       membresData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       const actifs = membresData.filter((m) => m.statut !== 'INACTIF').length;
       setMembresActifs(actifs);
-      calculerRetardsEtActivites(membresData, contribsData, depensesData);
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
     });
 
     // 2. Écouter les contributions
     const unsubContribs = onSnapshot(collection(db, 'contributions'), (snapshot) => {
       contribsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const totalC = contribsData.reduce((acc, curr) => acc + (Number(curr.montantVerse) || 0), 0);
-      setTotalContributions(totalC);
-      calculerRetardsEtActivites(membresData, contribsData, depensesData);
+      actualiserTotalContributions();
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
     });
 
-    // 3. Écouter les dépenses
+    // 3. Écouter les contributions du mois spécial
+    const unsubContributionsSpeciales = onSnapshot(collection(db, 'contributions_speciales'), (snapshot) => {
+      contributionsSpecialesData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      actualiserTotalContributions();
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
+    });
+
+    // 4. Écouter les dépenses
     const unsubDepenses = onSnapshot(collection(db, 'depenses'), (snapshot) => {
       depensesData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       const totalD = depensesData.reduce((acc, curr) => acc + (Number(curr.montant) || 0), 0);
       setTotalDepenses(totalD);
-      calculerRetardsEtActivites(membresData, contribsData, depensesData);
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
+    });
+
+    const unsubEmprunts = onSnapshot(collection(db, 'emprunts'), (snapshot) => {
+      empruntsData = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+      setTotalEmpruntsAccordes(empruntsData.reduce((total, emprunt) => total + (Number(emprunt.montantEmprunte) || 0), 0));
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
+    });
+
+    const unsubPaiementsEmprunts = onSnapshot(collection(db, 'paiements_emprunts'), (snapshot) => {
+      paiementsEmpruntsData = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+      setTotalAutresEntrees(
+        paiementsEmpruntsData.reduce((total, paiement) => total + (Number(paiement.montantVerse) || 0), 0) +
+        paiementsPenalitesData.reduce((total, paiement) => total + (Number(paiement.montantVerse) || 0), 0)
+      );
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
+    });
+
+    const unsubPaiementsPenalites = onSnapshot(collection(db, 'paiements_penalites'), (snapshot) => {
+      paiementsPenalitesData = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+      setTotalAutresEntrees(
+        paiementsEmpruntsData.reduce((total, paiement) => total + (Number(paiement.montantVerse) || 0), 0) +
+        paiementsPenalitesData.reduce((total, paiement) => total + (Number(paiement.montantVerse) || 0), 0)
+      );
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
+    });
+
+    const unsubConfig = onSnapshot(doc(db, 'settings', 'caisse_config'), (snapshot) => {
+      if (snapshot.exists()) dateDebutCaisse = snapshot.data().dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT;
+      calculerRetardsEtActivites(membresData, toutesContributions(), depensesData, empruntsData, paiementsEmpruntsData, paiementsPenalitesData, dateDebutCaisse);
     });
 
     return () => {
       unsubMembres();
       unsubContribs();
+      unsubContributionsSpeciales();
       unsubDepenses();
+      unsubEmprunts();
+      unsubPaiementsEmprunts();
+      unsubPaiementsPenalites();
+      unsubConfig();
     };
   }, []);
 
-  const calculerRetardsEtActivites = (membres: any[], contributions: any[], depenses: any[]) => {
-    if (membres.length === 0) return;
-
-    const moisActuel = new Date().getMonth() + 1;
-
+  const calculerRetardsEtActivites = (
+    membres: any[],
+    contributions: any[],
+    depenses: any[],
+    emprunts: any[],
+    paiementsEmprunts: any[],
+    paiementsPenalites: any[],
+    dateDebutCaisse: string
+  ) => {
     // Calcul du nombre de membres en retard
     let retardCount = 0;
+    const moisAttendus = nombreMoisAttendus(dateDebutCaisse);
     membres.forEach((membre) => {
       const memberContribs = contributions.filter((c) => c.membreId === membre.id);
-      const totalMoisPayes = memberContribs.reduce((sum, c) => sum + (Number(c.nombreMois) || 0), 0);
-      if (totalMoisPayes < moisActuel) {
-        retardCount++;
-      }
+      if (moisImpayesPour(dateDebutCaisse, moisAttendus, memberContribs).length > 0) retardCount++;
     });
     setMembresEnRetard(retardCount);
 
@@ -92,31 +162,29 @@ export default function AdminDashboardPage() {
         ? (membreObj.nomComplet || `${membreObj.prenom || ''} ${membreObj.nom || ''}`.trim())
         : 'Membre';
 
-      let dateStr = new Date().toISOString().split('T')[0];
-      if (c.datePaiement) {
-        dateStr = String(c.datePaiement).split('T')[0];
-      }
+      const dateStr = normaliserDateFirestore(c.datePaiement) || new Date().toISOString();
 
       return {
-        id: c.id,
-        type: 'contribution',
+        id: `contribution-${c.id}`,
+        type: 'contribution' as const,
+        direction: 'entree' as const,
         membre: nomMembre,
         montant: Number(c.montantVerse) || 0,
         date: dateStr,
-        description: `Cotisation (${c.nombreMois || 1} mois)`,
+        description: c.typeContribution === 'MOIS_SPECIAL'
+          ? `Mois spécial (${c.moisSpecial || 'date non précisée'})`
+          : `Cotisation (${c.nombreMois || 1} mois)`,
       };
     });
 
     // Formater les dépenses
     const formattedDepenses: ActiviteRecente[] = depenses.map((d) => {
-      let dateStr = new Date().toISOString().split('T')[0];
-      if (d.dateDepense) {
-        dateStr = String(d.dateDepense).split('T')[0];
-      }
+      const dateStr = normaliserDateFirestore(d.dateDepense) || new Date().toISOString();
 
       return {
-        id: d.id,
-        type: 'depense',
+        id: `depense-${d.id}`,
+        type: 'depense' as const,
+        direction: 'sortie' as const,
         membre: d.approuvePar || 'Admin',
         montant: Number(d.montant) || 0,
         date: dateStr,
@@ -124,17 +192,64 @@ export default function AdminDashboardPage() {
       };
     });
 
-    // Fusion correcte avec spread operator
-    const toutesActivites = [...formattedContribs, ...formattedDepenses].sort((a, b) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+    const formattedEmprunts: ActiviteRecente[] = emprunts.map((emprunt) => ({
+      id: `emprunt-${emprunt.id}`,
+      type: 'emprunt',
+      direction: 'sortie',
+      membre: emprunt.nomMembre || 'Membre',
+      montant: Number(emprunt.montantEmprunte) || 0,
+      date: normaliserDateFirestore(emprunt.createdAt || emprunt.dateEmprunt) || new Date().toISOString(),
+      description: 'Prise d’un emprunt',
+    }));
+    const formattedPaiementsEmprunts: ActiviteRecente[] = paiementsEmprunts.map((paiement) => ({
+      id: `remboursement-${paiement.id}`,
+      type: 'remboursement',
+      direction: 'entree',
+      membre: paiement.nomMembre || 'Membre',
+      montant: Number(paiement.montantVerse) || 0,
+      date: normaliserDateFirestore(paiement.datePaiement) || new Date().toISOString(),
+      description: 'Paiement d’un emprunt',
+    }));
+    const formattedPaiementsPenalites: ActiviteRecente[] = paiementsPenalites.map((paiement) => {
+      const membreObj = membres.find((m) => m.id === paiement.membreId);
+      return {
+        id: `penalite-${paiement.id}`,
+        type: 'penalite',
+        direction: 'entree',
+        membre: membreObj?.nomComplet || `${membreObj?.prenom || ''} ${membreObj?.nom || ''}`.trim() || 'Membre',
+        montant: Number(paiement.montantVerse) || 0,
+        date: normaliserDateFirestore(paiement.datePaiement) || new Date().toISOString(),
+        description: 'Paiement d’une pénalité',
+      };
+    });
+    const formattedMembres: ActiviteRecente[] = membres
+      .filter((membre) => membre.createdAt || membre.dateAdhesion)
+      .map((membre) => ({
+        id: `membre-${membre.id}`,
+        type: 'membre',
+        direction: 'aucune',
+        membre: membre.nomComplet || `${membre.prenom || ''} ${membre.nom || ''}`.trim() || 'Membre',
+        montant: 0,
+        date: normaliserDateFirestore(membre.createdAt || membre.dateAdhesion),
+        description: 'Ajout d’un membre',
+      }));
+
+    const toutesActivites = [
+      ...formattedContribs,
+      ...formattedDepenses,
+      ...formattedEmprunts,
+      ...formattedPaiementsEmprunts,
+      ...formattedPaiementsPenalites,
+      ...formattedMembres,
+    ].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 
     setActivitesRecentes(toutesActivites.slice(0, 5));
     setIsLoading(false);
   };
 
-  const soldeActuel = totalContributions - totalDepenses;
-  const tauxDepenses = totalContributions > 0 ? Math.round((totalDepenses / totalContributions) * 100) : 0;
+  const soldeActuel = totalContributions + totalAutresEntrees - totalDepenses - totalEmpruntsAccordes;
+  const totalEntrees = totalContributions + totalAutresEntrees;
+  const tauxDepenses = totalEntrees > 0 ? Math.round((totalDepenses / totalEntrees) * 100) : 0;
 
   return (
     <div className="space-y-8 pb-2">
@@ -248,7 +363,8 @@ export default function AdminDashboardPage() {
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {activitesRecentes.map((act) => {
-              const estEntree = act.type === 'contribution';
+              const estEntree = act.direction === 'entree';
+              const estSortie = act.direction === 'sortie';
               return (
                 <div
                   key={act.id}
@@ -259,10 +375,12 @@ export default function AdminDashboardPage() {
                       className={`shrink-0 rounded-xl p-2.5 ring-1 ring-inset ${
                         estEntree
                           ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/50'
-                          : 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/50'
+                          : estSortie
+                            ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/50'
+                            : 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700'
                       }`}
                     >
-                      {estEntree ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
+                      {estEntree ? <ArrowUpRight size={18} /> : estSortie ? <ArrowDownRight size={18} /> : <ArrowRight size={18} />}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -271,27 +389,28 @@ export default function AdminDashboardPage() {
                           className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:inline-block ${
                             estEntree
                               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                              : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                              : estSortie
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                           }`}
                         >
-                          {estEntree ? 'Entrée' : 'Sortie'}
+                          {estEntree ? 'Entrée' : estSortie ? 'Sortie' : 'Info'}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                         Par <strong className="font-semibold text-slate-700 dark:text-slate-300">{act.membre}</strong> ·{' '}
-                        {isNaN(new Date(act.date).getTime()) 
-                          ? act.date 
-                          : new Date(`${act.date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {isNaN(new Date(act.date).getTime())
+                          ? act.date
+                          : new Date(act.date).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}
                       </p>
                     </div>
                   </div>
                   <span
                     className={`pl-12 text-sm font-bold tabular-nums sm:pl-0 sm:text-right ${
-                      estEntree ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                      estEntree ? 'text-emerald-600 dark:text-emerald-400' : estSortie ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'
                     }`}
                   >
-                    {estEntree ? '+' : '-'}
-                    {act.montant.toLocaleString()} FC
+                    {act.direction === 'aucune' ? '—' : `${estEntree ? '+' : '-'}${act.montant.toLocaleString()} FC`}
                   </span>
                 </div>
               );

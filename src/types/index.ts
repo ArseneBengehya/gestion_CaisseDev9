@@ -51,6 +51,12 @@ export interface StatutMembreContribution {
   moisImpayes: string[];      // ex: ['2026-03']
   moisFutursPayes: string[];  // ex: ['2026-11', '2026-12']
   dernierPaiementDate?: string;
+  historiquePaiements?: {
+    mois: string;
+    montant: number;
+    modePaiement: string;
+    datePaiement: string;
+  }[];
 }
 
 // 4. Structure d'une Dépense
@@ -87,7 +93,11 @@ export interface Emprunt {
   montantTotalARembourser: number; // Montant + Intérêt calculé
   dateEmprunt: string;
   dateEcheance: string;
-  statut: 'En cours' | 'Remboursé' | 'En retard';
+  statut: 'Paiement en attente' | 'En cours' | 'À jour' | 'Remboursé' | 'En retard';
+  montantPaye?: number;
+  montantRestant?: number;
+  dateDernierPaiement?: string;
+  createdAt?: string;
 }
 
 // Structure d'une Notification pour le membre

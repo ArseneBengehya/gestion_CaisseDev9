@@ -33,6 +33,15 @@ const incrementerMois = (key: string): string => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 };
 
+export const nombreMoisAttendus = (dateDebutCaisse: string, dateCourante = new Date()): number => {
+  const moisDebut = extraireCleMois(dateDebutCaisse) || extraireCleMois(DATE_DEBUT_CAISSE_PAR_DEFAUT)!;
+  const moisActuel = `${dateCourante.getFullYear()}-${String(dateCourante.getMonth() + 1).padStart(2, "0")}`;
+  if (moisDebut > moisActuel) return 0;
+
+  const [anneeDebut, numeroMoisDebut] = moisDebut.split("-").map(Number);
+  return (dateCourante.getFullYear() - anneeDebut) * 12 + dateCourante.getMonth() - numeroMoisDebut + 2;
+};
+
 export const obtenirMoisCouvertsParContributions = (
   contributions: readonly ContributionMonthRecord[],
   dateDebutCaisse: string
@@ -83,4 +92,22 @@ export const obtenirMoisCouvertsParContributions = (
   }
 
   return resultats;
+};
+
+export const moisImpayesPour = (
+  dateDebutCaisse: string,
+  moisAttendusTotal: number,
+  contributions: readonly ContributionMonthRecord[]
+): string[] => {
+  const premierMois = extraireCleMois(dateDebutCaisse) || extraireCleMois(DATE_DEBUT_CAISSE_PAR_DEFAUT)!;
+  const moisPayes = new Set(obtenirMoisCouvertsParContributions(contributions, dateDebutCaisse).flat());
+  const moisImpayes: string[] = [];
+  let moisCourant = premierMois;
+
+  for (let index = 0; index < moisAttendusTotal; index += 1) {
+    if (!moisPayes.has(moisCourant)) moisImpayes.push(moisCourant);
+    moisCourant = incrementerMois(moisCourant);
+  }
+
+  return moisImpayes;
 };

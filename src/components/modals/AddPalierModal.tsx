@@ -55,7 +55,7 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
               value={min}
               onChange={(e) => setMin(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Ex: 20000"
+              placeholder="tapez monatant"
             />
           </div>
 
@@ -64,11 +64,11 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
               Au montant Y (FC)
             </label>
             <input
-              type="text"
+              type="number"
               value={max}
               onChange={(e) => setMax(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Ex: 50000 (Vide = 'Et plus')"
+              placeholder="Tapez montant"
             />
           </div>
         </div>
@@ -84,7 +84,7 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
               value={delai}
               onChange={(e) => setDelai(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Ex: 1 mois"
+              placeholder="Entrez le delai de remboursement"
             />
           </div>
 
@@ -98,7 +98,7 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
               value={taux}
               onChange={(e) => setTaux(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
-              placeholder="Ex: 20"
+              placeholder="entrer le taux d'interet pour ce palier"
             />
           </div>
         </div>

@@ -84,10 +84,14 @@ export async function getContributionsByMembreId(membreId: string): Promise<Cont
 
 export async function creerDemandeEmprunt(empruntData: Omit<Emprunt, "id">): Promise<string | null> {
   try {
+    const dateEmprunt = new Date().toISOString();
     const docRef = await addDoc(collection(db, "emprunts"), {
       ...empruntData,
-      dateEmprunt: new Date().toISOString(),
-      statut: "En cours"
+      dateEmprunt,
+      createdAt: dateEmprunt,
+      montantPaye: 0,
+      montantRestant: Number(empruntData.montantTotalARembourser) || 0,
+      statut: "Paiement en attente"
     });
     await addNotification({
       membreId: "TOUS",
