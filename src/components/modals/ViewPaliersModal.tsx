@@ -105,7 +105,7 @@ export default function ViewPaliersModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 transition-colors"
+            className="px-5 py-2 text-xs font-bold rounded-xl bg-blue-500 text-white hover:bg-blue-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 transition-colors"
           >
             Fermer
           </button>

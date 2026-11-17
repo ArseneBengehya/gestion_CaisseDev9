@@ -14,7 +14,6 @@ import {
   X,
   Bell,
   ShieldCheck,
-  Loader2,
 } from "lucide-react";
 
 // Importations Firebase et Firestore
@@ -23,6 +22,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/f
 import { useRouter } from "next/navigation";
 import Modal from "@/components/ui/Modal";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import PageSkeleton from "@/components/ui/PageSkeleton";
 
 export default function MembreLayout({
   children,
@@ -162,11 +162,8 @@ export default function MembreLayout({
 
   if (!isAuthorized) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50 text-slate-700 dark:bg-slate-950 dark:text-slate-100">
-        <div className="flex items-center gap-3">
-          <Loader2 size={24} className="animate-spin text-slate-500 dark:text-slate-300" />
-          <span className="text-sm font-medium">Chargement de votre espace membre...</span>
-        </div>
+      <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 sm:p-8">
+        <PageSkeleton layout="member-dashboard" />
       </div>
     );
   }
@@ -297,7 +294,6 @@ export default function MembreLayout({
                 </span>
               )}
             </button>
-
             <ThemeToggle />
 
             {/* Avatar / Profil rapide */}

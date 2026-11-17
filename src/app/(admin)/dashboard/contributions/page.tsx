@@ -8,6 +8,10 @@ import AddContributionDrawer from '@/src/components/modals/AddContributionDrawer
 import PayPenaliteModal, { MembrePenalite } from '@/src/components/modals/PayPenaliteModal';
 import ViewHistoriqueModal from '@/src/components/modals/ViewHistoriqueModal';
 import Toast from '@/src/components/ui/Toast';
+import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
+import SpecialMonthSection, { ContributionSpeciale } from '@/src/components/contributions/SpecialMonthSection';
+import PenaltiesSection, { PenaliteAvecMembre } from '@/src/components/contributions/PenaltiesSection';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 import {
   ContributionMonthRecord,
   DATE_DEBUT_CAISSE_PAR_DEFAUT,
@@ -32,6 +36,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
+import type { CsvColumn } from '@/src/lib/export-csv';
 
 interface ContributionDoc extends ContributionMonthRecord {
   id: string;
@@ -53,19 +58,6 @@ interface ContributionSpecialDoc {
   modePaiement: string;
   note: string;
   datePaiement: string;
-}
-
-interface ContributionSpeciale {
-  id: string;
-  nomMembre: string;
-  moisSpecial: string;
-  montantVerse: number;
-  modePaiement: string;
-  datePaiement: string;
-}
-
-interface PenaliteAvecMembre extends Penalite {
-  nomMembre: string;
 }
 
 export default function ContributionsPage() {
@@ -484,6 +476,10 @@ export default function ContributionsPage() {
         </span>
       ),
     },
+    {
+      header: 'Dernier paiement',
+      accessor: (item) => item.dernierPaiementDate || '—',
+    },
   ];
 
   const totalCotisations = contributionsData.reduce((acc, curr) => acc + curr.montantTotalCotise, 0);
@@ -504,30 +500,6 @@ export default function ContributionsPage() {
       };
     });
   const totalMoisSpecial = contributionsSpeciales.reduce((total, contribution) => total + contribution.montantVerse, 0);
-  const colonnesMoisSpecial: Column<ContributionSpeciale>[] = [
-    { header: 'Membre', accessor: 'nomMembre' },
-    {
-      header: 'Mois spécial',
-      accessor: (item) => {
-        const [year, month] = item.moisSpecial.split('-').map(Number);
-        const label = year && month
-          ? new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-          : item.moisSpecial;
-        return <span className="font-medium capitalize">{label}</span>;
-      },
-    },
-    {
-      header: 'Montant',
-      accessor: (item) => <span className="font-semibold text-emerald-700 dark:text-emerald-400">{item.montantVerse.toLocaleString()} FC</span>,
-    },
-    { header: 'Mode de paiement', accessor: 'modePaiement' },
-    {
-      header: 'Date de paiement',
-      accessor: (item) => item.datePaiement
-        ? new Date(item.datePaiement).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-        : '—',
-    },
-  ];
 
   const penalitesAvecMembre: PenaliteAvecMembre[] = penalites.map((penalite) => {
     const membre = membres.find((item) => item.id === penalite.membreId);
@@ -550,52 +522,88 @@ export default function ContributionsPage() {
   const totalPenalitesPayees = penalites.reduce((total, penalite) => total + penalite.montantPaye, 0);
   const totalPenalitesRestantes = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
 
-  const colonnesPenalites: Column<PenaliteAvecMembre>[] = [
-    { header: 'Membre', accessor: 'nomMembre' },
+  const cotisationsExportRows = contributionsData.map((item) => ({
+    nom: item.membre.nomComplet || `${item.membre.prenom} ${item.membre.nom}`.trim(),
+    telephone: item.membre.telephone,
+    totalCotise: item.montantTotalCotise,
+    dette: item.detteActuelle,
+    penalitesRestantes: penalites
+      .filter((penalite) => penalite.membreId === item.membre.id)
+      .reduce((total, penalite) => total + soldePenalite(penalite), 0),
+    moisPayes: item.moisPayes.join(', '),
+    moisImpayes: item.moisImpayes.join(', '),
+    moisFuturs: item.moisFutursPayes.join(', '),
+    dernierPaiement: item.dernierPaiementDate || '—',
+  }));
+  const cotisationsExportColumns: CsvColumn<(typeof cotisationsExportRows)[number]>[] = [
+    { header: 'Membre', value: (row) => row.nom },
+    { header: 'Téléphone', value: (row) => row.telephone },
+    { header: 'Total cotisé (FC)', value: (row) => row.totalCotise },
+    { header: 'Dette de cotisation (FC)', value: (row) => row.dette },
+    { header: 'Pénalités restantes (FC)', value: (row) => row.penalitesRestantes },
+    { header: 'Mois payés', value: (row) => row.moisPayes },
+    { header: 'Mois impayés', value: (row) => row.moisImpayes },
+    { header: 'Mois payés d’avance', value: (row) => row.moisFuturs },
+    { header: 'Dernier paiement', value: (row) => row.dernierPaiement },
+  ];
+  const moisSpecialExportColumns: CsvColumn<ContributionSpeciale>[] = [
+    { header: 'Membre', value: (row) => row.nomMembre },
+    { header: 'Mois spécial', value: (row) => row.moisSpecial },
+    { header: 'Montant versé (FC)', value: (row) => row.montantVerse },
+    { header: 'Mode de paiement', value: (row) => row.modePaiement },
+    { header: 'Date de paiement', value: (row) => row.datePaiement },
+  ];
+  const penalitesExportRows = [
+    ...penalitesAvecMembre.map((penalite) => ({
+      membre: penalite.nomMembre,
+      periode: penalite.moisDeclenchementKey,
+      du: penalite.montantDu,
+      paye: penalite.montantPaye,
+      solde: soldePenalite(penalite),
+      dernierPaiement: penalite.dateDernierPaiement || '—',
+    })),
     {
-      header: 'Période déclenchée',
-      accessor: (item) => {
-        const [year, month] = item.moisDeclenchementKey.split('-').map(Number);
-        return year && month
-          ? new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-          : item.moisDeclenchementKey || '—';
-      },
-    },
-    {
-      header: 'Montant dû',
-      accessor: (item) => <span className="font-semibold">{item.montantDu.toLocaleString('fr-FR')} FC</span>,
-    },
-    {
-      header: 'Montant payé',
-      accessor: (item) => <span className="font-semibold text-emerald-700 dark:text-emerald-400">{item.montantPaye.toLocaleString('fr-FR')} FC</span>,
-    },
-    {
-      header: 'Solde',
-      accessor: (item) => {
-        const solde = soldePenalite(item);
-        return <span className={`font-semibold ${solde > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>{solde.toLocaleString('fr-FR')} FC</span>;
-      },
-    },
-    {
-      header: 'Statut',
-      accessor: (item) => {
-        const solde = soldePenalite(item);
-        const statut = solde === 0 ? 'Payée' : item.montantPaye > 0 ? 'En cours' : 'En attente';
-        const className = solde === 0
-          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-          : item.montantPaye > 0
-            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-            : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300';
-        return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{statut}</span>;
-      },
-    },
-    {
-      header: 'Dernier paiement',
-      accessor: (item) => item.dateDernierPaiement
-        ? new Date(normaliserDateFirestore(item.dateDernierPaiement)).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-        : '—',
+      membre: 'TOTAL',
+      periode: `${penalites.length} pénalité(s)`,
+      du: totalPenalitesDues,
+      paye: totalPenalitesPayees,
+      solde: totalPenalitesRestantes,
+      dernierPaiement: '',
     },
   ];
+  const penalitesExportColumns: CsvColumn<(typeof penalitesExportRows)[number]>[] = [
+    { header: 'Membre', value: (row) => row.membre },
+    { header: 'Période déclenchée', value: (row) => row.periode },
+    { header: 'Montant dû (FC)', value: (row) => row.du },
+    { header: 'Montant payé (FC)', value: (row) => row.paye },
+    { header: 'Solde restant (FC)', value: (row) => row.solde },
+    { header: 'Dernier paiement', value: (row) => row.dernierPaiement },
+  ];
+  const exportButton = activeTab === 'cotisations' ? (
+    <ExportCsvButton
+      filename="rapport-cotisations"
+      columns={cotisationsExportColumns}
+      rows={cotisationsExportRows}
+      label="Exporter le rapport"
+      disabled={isLoading || isSpecialLoading}
+    />
+  ) : activeTab === 'mois-special' ? (
+    <ExportCsvButton
+      filename="rapport-mois-special"
+      columns={moisSpecialExportColumns}
+      rows={contributionsSpeciales}
+      label="Exporter le rapport"
+      disabled={isSpecialLoading}
+    />
+  ) : (
+    <ExportCsvButton
+      filename="rapport-penalites"
+      columns={penalitesExportColumns}
+      rows={penalitesExportRows}
+      label="Exporter les pénalités"
+      disabled={isPenaltiesLoading}
+    />
+  );
 
   return (
     <div className="relative space-y-6">
@@ -619,24 +627,27 @@ export default function ContributionsPage() {
                 : <>Suivi des pénalités enregistrées, des paiements partiels et des soldes restants.</>}
           </p>
         </div>
-        {activeTab === 'penalites' ? (
-          <button
-            type="button"
-            onClick={() => setIsPayPenaliteOpen(true)}
-            disabled={membresAvecPenalite.length === 0}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-          >
-            <HandCoins size={18} /> Payer une pénalité
-          </button>
-        ) : (
-          <button
-            onClick={() => setIsDrawerOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-          >
-            <PlusCircle size={18} />
-            {activeTab === 'cotisations' ? 'Nouvelle Contribution' : 'Nouveau Mois spécial'}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {exportButton}
+          {activeTab === 'penalites' ? (
+            <button
+              type="button"
+              onClick={() => setIsPayPenaliteOpen(true)}
+              disabled={membresAvecPenalite.length === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              <HandCoins size={18} /> Payer une pénalité
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              <PlusCircle size={18} />
+              {activeTab === 'cotisations' ? 'Nouvelle Contribution' : 'Nouveau Mois spécial'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex w-fit rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
@@ -678,6 +689,10 @@ export default function ContributionsPage() {
       {activeTab === 'cotisations' ? (
         <>
 {/* Cartes KPI : 2 par ligne sur petit écran, et 3 sur la même ligne sur grand écran */}
+      {isLoading || isSpecialLoading ? (
+        <PageSkeleton layout="cards-table" cards={3} columns={6} rows={6} />
+      ) : (
+        <>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
@@ -716,96 +731,29 @@ export default function ContributionsPage() {
           </p>
         </div>
       </div>
-      {isLoading || isSpecialLoading ? (
-        <div className="p-8 text-center text-slate-500">Chargement des contributions en cours</div>
-      ) : (
         <DataTable
           data={contributionsData.map((d) => ({ ...d, id: d.membre.id }))}
           columns={columns}
           onView={openHistoriqueView}
         />
+        </>
       )}
         </>
       ) : activeTab === 'mois-special' ? (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total mois spéciaux versés</span>
-                <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300"><PiggyBank size={18} /></div>
-              </div>
-              <p className="mt-2 truncate text-lg font-extrabold tabular-nums sm:text-xl">
-                {totalMoisSpecial.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
-              </p>
-            </div>
-            <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Versements enregistrés</span>
-                <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300"><CalendarDays size={18} /></div>
-              </div>
-              <p className="mt-2 truncate text-lg font-extrabold tabular-nums sm:text-xl">
-                {contributionsSpeciales.length} <span className="text-xs font-normal text-slate-500">Paiement(s)</span>
-              </p>
-            </div>
-          </div>
-          {isLoading ? (
-            <div className="p-8 text-center text-slate-500">Chargement des mois spéciaux...</div>
-          ) : (
-            <DataTable
-              data={contributionsSpeciales}
-              columns={colonnesMoisSpecial}
-              searchKey="nomMembre"
-              searchPlaceholder="Rechercher un membre..."
-            />
-          )}
-        </>
+        <SpecialMonthSection
+          contributions={contributionsSpeciales}
+          total={totalMoisSpecial}
+          isLoading={isLoading || isSpecialLoading}
+        />
       ) : (
-        <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pénalités enregistrées</span>
-                <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300"><ShieldAlert size={18} /></div>
-              </div>
-              <p className="mt-2 truncate text-lg font-extrabold tabular-nums sm:text-xl">{totalPenalitesDues.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
-            </div>
-            <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pénalités payées</span>
-                <div className="shrink-0 rounded-lg bg-emerald-50 p-2 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><CheckCircle size={18} /></div>
-              </div>
-              <p className="mt-2 truncate text-lg font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400 sm:text-xl">{totalPenalitesPayees.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
-            </div>
-            <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Solde à recouvrer</span>
-                <div className="shrink-0 rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"><AlertCircle size={18} /></div>
-              </div>
-              <p className="mt-2 truncate text-lg font-extrabold tabular-nums text-rose-700 dark:text-rose-400 sm:text-xl">{totalPenalitesRestantes.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
-            </div>
-            <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Paiements enregistrés</span>
-                <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300"><CalendarDays size={18} /></div>
-              </div>
-              <p className="mt-2 truncate text-lg font-extrabold tabular-nums sm:text-xl">{paiementsPenalites.length} <span className="text-xs font-normal text-slate-500">Paiement(s)</span></p>
-            </div>
-          </div>
-          {isPenaltiesLoading || isLoading ? (
-            <div className="p-8 text-center text-slate-500">Chargement des pénalités...</div>
-          ) : penalitesAvecMembre.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              Aucune pénalité n’est enregistrée pour le moment.
-            </div>
-          ) : (
-            <DataTable
-              data={penalitesAvecMembre}
-              columns={colonnesPenalites}
-              searchKey="nomMembre"
-              searchPlaceholder="Rechercher un membre..."
-            />
-          )}
-        </>
+        <PenaltiesSection
+          penalites={penalitesAvecMembre}
+          totalDu={totalPenalitesDues}
+          totalPaye={totalPenalitesPayees}
+          soldeTotal={totalPenalitesRestantes}
+          nombrePaiements={paiementsPenalites.length}
+          isLoading={isPenaltiesLoading || isLoading}
+        />
       )}
 
       <AddContributionDrawer

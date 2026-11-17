@@ -12,10 +12,13 @@ import {
   soldePenalite,
 } from '@/src/lib/penalties';
 import { ContributionMonthRecord } from '@/src/lib/contribution-months';
+import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
+import type { CsvColumn } from '@/src/lib/export-csv';
 
 // Import Firestore
 import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 
 interface ContributionData extends ContributionMonthRecord {
   id: string;
@@ -316,6 +319,16 @@ export default function RetardsPage() {
   const penalitesEnAttente = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
   const penalitesEnregistrees = penalites.reduce((total, penalite) => total + penalite.montantDu, 0);
 
+  const exportColumns: CsvColumn<MembreEnRetard>[] = [
+    { header: 'Membre', value: (membre) => membre.nomComplet },
+    { header: 'Téléphone', value: (membre) => membre.telephone },
+    { header: 'Mois en retard', value: (membre) => membre.moisImpayesNoms.join(', ') },
+    { header: 'Nombre de mois en retard', value: (membre) => membre.moisEnRetard },
+    { header: 'Cotisations dues (FC)', value: (membre) => membre.montantCotisationDuh },
+    { header: 'Pénalités restantes (FC)', value: (membre) => membre.penalite },
+    { header: 'Total à payer (FC)', value: (membre) => membre.totalDuh },
+  ];
+
   return (
     <div className="relative space-y-6">
       {/* Toast de notification */}
@@ -328,7 +341,7 @@ export default function RetardsPage() {
       )}
 
       {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
             Suivi des Retards & Relances Automatiques
@@ -344,6 +357,9 @@ export default function RetardsPage() {
       </div>
 
       {/* Cartes KPI redessinées (épurées et sobres) */}
+      {isLoading ? (
+        <PageSkeleton layout="cards" cards={3} />
+      ) : (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
@@ -392,20 +408,28 @@ export default function RetardsPage() {
           </p>
         </div>
       </div>
-
-      {/* Liste des membres en retard */}
+      )}
+      {/* Liste des membres en retard  */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Relances Automatiques WhatsApp API
+            Signaler un retard au membre en retard
           </h3>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Envoi sécurisé via le serveur
+            <ExportCsvButton
+              filename="rapport-retards-et-relances"
+              columns={exportColumns}
+              rows={membresRetard}
+              label="Exporter"
+              disabled={isLoading}
+            />
           </span>
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-500">Analyse des retards en cours...</div>
+          <div className="p-4 sm:p-6">
+            <PageSkeleton layout="activity-list" rows={5} />
+          </div>
         ) : membresRetard.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             Aucun membre en retard pour le moment. Tout le monde est à jour !
@@ -430,7 +454,7 @@ export default function RetardsPage() {
                       <span className="text-base font-bold text-slate-900 dark:text-white">
                         {membre.nomComplet}
                       </span>
-                      <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold dark:bg-rose-950/60 dark:text-rose-300">
+                      <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold ">
                         {membre.moisEnRetard} mois de retard
                       </span>
                     </div>
@@ -466,7 +490,7 @@ export default function RetardsPage() {
                     className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl shadow-sm transition-all ${
                       sentSuccessId === membre.id
                         ? 'bg-emerald-100 dark:bg-emerald-950/60 '
-                        : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
+                        : 'bg-blue-500 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
                     }`}
                   >
                     {sendingId === membre.id ? (

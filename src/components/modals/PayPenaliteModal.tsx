@@ -160,7 +160,7 @@ export default function PayPenaliteModal({
               <button
                 type="submit"
                 disabled={!membreSelectionne || !montantValide || depasseSolde || isSubmitting}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
               >
                 {isSubmitting ? 'Enregistrement...' : 'Enregistrer le paiement'}
               </button>

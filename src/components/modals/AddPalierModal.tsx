@@ -115,7 +115,7 @@ export default function AddPalierModal({ isOpen, onClose, onAdd }: AddPalierModa
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition shadow-sm disabled:opacity-50"
           >
             {isSubmitting ? 'Ajout...' : 'Ajouter le palier'}
           </button>

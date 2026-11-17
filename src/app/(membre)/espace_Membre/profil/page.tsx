@@ -9,7 +9,6 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Loader2,
   Wallet,
   Pencil,
   Save,
@@ -21,6 +20,7 @@ import Modal from "../../../../components/ui/Modal";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
 import { uploadMemberPhoto } from "../../../../lib/member-photo";
+import PageSkeleton from "../../../../components/ui/PageSkeleton";
 
 export default function ProfilPage() {
   const [membre, setMembre] = useState<Membre | null>(null);
@@ -118,12 +118,7 @@ export default function ProfilPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
-        <Loader2 size={32} className="animate-spin text-blue-600" />
-        <p className="text-xs font-semibold">Chargement des données de votre profil...</p>
-      </div>
-    );
+    return <PageSkeleton layout="profile" />;
   }
 
   return (

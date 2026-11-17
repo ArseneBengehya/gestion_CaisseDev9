@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -14,8 +19,15 @@ const firebaseConfig = {
 // Une seule instance Firebase pour l'application.
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Firestore stocke les données du membre et l'URL de sa photo.
-export const db = getFirestore(app);
+const db = typeof window === 'undefined'
+  ? getFirestore(app)
+  : initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+
+export { db };
 
 // Firebase Storage stocke le fichier image lui-même.
 export const storage = getStorage(app);

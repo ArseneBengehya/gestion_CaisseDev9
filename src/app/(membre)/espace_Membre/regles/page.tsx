@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { ShieldCheck, BookOpen, Calendar, AlertCircle, Loader2, Coins } from "lucide-react";
+import { ShieldCheck, BookOpen, Calendar, AlertCircle, Coins } from "lucide-react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../../../lib/firebase"; // Ajuste le chemin selon la profondeur
 import { RegleCaisse } from "../../../../types";
 import { DATE_DEBUT_CAISSE_PAR_DEFAUT } from "../../../../lib/contribution-months";
+import PageSkeleton from "../../../../components/ui/PageSkeleton";
 
 export default function ReglesCaissePage() {
   const [regles, setRegles] = useState<RegleCaisse[]>([]);
@@ -46,12 +47,7 @@ export default function ReglesCaissePage() {
   }, []);
 
   if (isLoading) {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
-        <Loader2 size={32} className="animate-spin text-blue-600" />
-        <p className="text-xs font-semibold">Chargement des règles de la caisse...</p>
-      </div>
-    );
+    return <PageSkeleton layout="rules" />;
   }
 
   return (

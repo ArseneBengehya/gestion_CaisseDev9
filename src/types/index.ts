@@ -93,7 +93,7 @@ export interface Emprunt {
   montantTotalARembourser: number; // Montant + Intérêt calculé
   dateEmprunt: string;
   dateEcheance: string;
-  statut: 'Paiement en attente' | 'En cours' | 'À jour' | 'Remboursé' | 'En retard';
+  statut: 'En attente' | 'En cours' | 'À jour' | 'Remboursé' | 'En retard';
   montantPaye?: number;
   montantRestant?: number;
   dateDernierPaiement?: string;

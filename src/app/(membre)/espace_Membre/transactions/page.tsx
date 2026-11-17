@@ -4,13 +4,13 @@ import React, { useEffect, useState, useMemo } from "react";
 import DataTable, { Column } from "../../../../components/ui/DataTable";
 import Modal from "../../../../components/ui/Modal";
 import {
-  Loader2,
   FileText,
   CalendarCheck,
   Eye,
   CalendarX,
   CalendarPlus,
 } from "lucide-react";
+import PageSkeleton from "../../../../components/ui/PageSkeleton";
 import { Contribution } from "../../../../types";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
@@ -214,12 +214,7 @@ export default function TransactionsPage() {
   ];
 
   if (isLoading) {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-3 text-slate-500">
-        <Loader2 size={32} className="animate-spin text-blue-600" />
-        <p className="text-xs font-semibold">Chargement de vos transactions depuis Firestore...</p>
-      </div>
-    );
+    return <PageSkeleton layout="cards-table" cards={3} columns={7} rows={6} />;
   }
 
   return (

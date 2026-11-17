@@ -249,7 +249,7 @@ export default function AddMembreModal({ isOpen, onClose, onSubmit }: AddMembreM
           <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
             Annuler
           </button>
-          <button type="submit" disabled={isSaving || Boolean(photoError)} className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white">
+          <button type="submit" disabled={isSaving || Boolean(photoError)} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white">
             <Save size={16} /> {isSaving ? 'Enregistrement...' : 'Enregistrer le membre'}
           </button>
         </div>

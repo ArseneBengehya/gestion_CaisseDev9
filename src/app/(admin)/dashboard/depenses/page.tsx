@@ -9,6 +9,8 @@ import EditDepenseModal from '@/src/components/modals/EditDepenseModal';
 import ViewDepenseModal from '@/src/components/modals/ViewDepenseModal';
 import Toast from '@/src/components/ui/Toast';
 import ConfirmDeleteModal from '@/src/components/ui/ConfirmDeleteModal';
+import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 
 // Import Firestore
 import {
@@ -21,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
+import type { CsvColumn } from '@/src/lib/export-csv';
 
 export default function DepensesPage() {
   const [depenses, setDepenses] = useState<Depense[]>([]);
@@ -188,6 +191,13 @@ export default function DepensesPage() {
   ];
 
   const totalDepenses = depenses.reduce((acc, curr) => acc + curr.montant, 0);
+  const exportColumns: CsvColumn<Depense>[] = [
+    { header: 'Motif', value: (depense) => depense.motif },
+    { header: 'Catégorie', value: (depense) => depense.categorie },
+    { header: 'Montant (FC)', value: (depense) => depense.montant },
+    { header: 'Date', value: (depense) => depense.dateDepense },
+    { header: 'Approuvé par', value: (depense) => depense.approuvePar },
+  ];
 
   return (
     <div className="relative space-y-6">
@@ -208,15 +218,28 @@ export default function DepensesPage() {
             Suivi des sorties d'argent (Caisse Dev9 lancée le {caisseConfig.dateDebutCaisse}).
           </p>
         </div>
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
-        >
-          <PlusCircle size={18} />
-          Nouvelle Dépense
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
+          >
+            <PlusCircle size={18} />
+            Nouvelle Dépense
+          </button>
+          <ExportCsvButton
+            filename="rapport-depenses"
+            columns={exportColumns}
+            rows={depenses}
+            label="Exporter"
+            disabled={isLoading}
+          />
+        </div>
       </div>
 
+      {isLoading ? (
+        <PageSkeleton layout="cards-table" cards={2} columns={5} rows={6} />
+      ) : (
+        <>
       {/* Cartes KPI redessinées (compatibles et épurées) */}
       <div className="grid grid-cols-2 gap-3">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
@@ -245,9 +268,6 @@ export default function DepensesPage() {
       </div>
 
       {/* Tableau des dépenses */}
-      {isLoading ? (
-        <div className="p-8 text-center text-slate-500">Chargement des dépenses en cours</div>
-      ) : (
         <DataTable
           data={depenses}
           columns={columns}
@@ -257,6 +277,7 @@ export default function DepensesPage() {
           onEdit={openEdit}
           onDelete={(item) => setDepenseToDelete(item)}
         />
+        </>
       )}
 
       {/* Modale de confirmation de suppression */}

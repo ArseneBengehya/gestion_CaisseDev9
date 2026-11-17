@@ -80,7 +80,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white transition shadow-sm disabled:opacity-50"
           >
             {isSubmitting ? 'Enregistrement...' : 'Valider et enregistrer'}
           </button>

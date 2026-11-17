@@ -14,11 +14,11 @@ import {
   Receipt,
   Eye,
   ArrowRight,
-  Loader2,
   ArrowUpRight,
   ArrowDownRight,
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
+import PageSkeleton from "@/components/ui/PageSkeleton";
 import {
   DATE_DEBUT_CAISSE_PAR_DEFAUT,
   normaliserDateFirestore,
@@ -203,7 +203,7 @@ export default function EspaceMembrePage() {
   const balance = totalContributions + totalLoanRepayments + totalPenaltyPayments - totalExpenses - totalLoansIssued;
   const sortedMovements = [...movements].sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0)).slice(0, 10);
 
-  if (loading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>;
+  if (loading) return <PageSkeleton layout="member-dashboard" />;
 
   return (
     <div className="space-y-8 pb-2">

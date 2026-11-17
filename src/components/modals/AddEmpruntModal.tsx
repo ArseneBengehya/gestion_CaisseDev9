@@ -91,7 +91,7 @@ export default function AddEmpruntModal({
               <option value="">Sélectionner un membre...</option>
               {membres.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.nomComplet || `${m.prenom} ${m.nom}`} ({m.telephone})
+                  {m.nomComplet || `${m.prenom} ${m.nom}`}
                 </option>
               ))}
             </select>
@@ -189,7 +189,7 @@ export default function AddEmpruntModal({
           <button
             type="submit"
             disabled={!palierTrouve}
-            className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
             Valider l'emprunt
           </button>

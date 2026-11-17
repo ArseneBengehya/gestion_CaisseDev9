@@ -8,6 +8,7 @@ import AddEmpruntModal from '@/src/components/modals/AddEmpruntModal';
 import EditEmpruntModal from '@/src/components/modals/EditEmpruntModal';
 import PayEmpruntModal from '@/src/components/modals/PayEmpruntModal';
 import Toast from '@/src/components/ui/Toast';
+import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
 
 // Import Firestore
 import {
@@ -19,6 +20,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
+import type { CsvColumn } from '@/src/lib/export-csv';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 import {
   dateEcheanceSelonDelai,
   enregistrerPaiementEmprunt,
@@ -106,7 +109,7 @@ export default function EmpruntsPage() {
             ? 'En cours'
             : data.statut === 'En retard'
               ? 'En retard'
-              : 'Paiement en attente';
+              : 'En attente';
         return {
           id: docSnap.id,
           membreId: data.membreId || '',
@@ -167,7 +170,7 @@ export default function EmpruntsPage() {
         createdAt: dateEmprunt,
         dateEmprunt,
         dateEcheance: data.dateEcheance,
-        statut: 'Paiement en attente',
+        statut: 'En attente',
       });
       await addNotification({
         membreId: 'TOUS',
@@ -217,7 +220,7 @@ export default function EmpruntsPage() {
           ? 'À jour'
           : (selectedEmprunt.montantPaye || 0) > 0
             ? 'En cours'
-            : 'Paiement en attente',
+            : 'En attente',
         dateEcheance: empruntModifie.dateEcheance,
       });
       showToast('success', "Emprunt mis à jour avec succès !");
@@ -314,7 +317,7 @@ export default function EmpruntsPage() {
       accessor: (item) => {
         const styles: Record<string, string> = {
           'En cours': 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
-          'Paiement en attente': 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+          'En attente': 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
           'À jour': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
           Remboursé: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
           'En retard': 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
@@ -326,41 +329,54 @@ export default function EmpruntsPage() {
         );
       },
     },
-    {
-      header: 'Actions',
-      accessor: (item) => {
-        const dateCreation = Date.parse(item.createdAt || item.dateEmprunt);
-        const estModifiable = Number.isFinite(dateCreation) && currentTime - dateCreation <= 120_000 && currentTime >= dateCreation;
-        const solde = item.montantRestant ?? item.montantTotalARembourser;
-        return (
-        <div className="flex items-center gap-2">
-          {solde > 0 && (
-            <>
-              {estModifiable && (
-              <button
-                onClick={() => openEditModal(item)}
-                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                title="Modification disponible pendant deux minutes"
-              >
-                <Edit size={14} />
-              </button>
-              )}
-              <button
-                onClick={() => setIsPayOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-              >
-                <Banknote size={14} /> Payer
-              </button>
-            </>
-          )}
-        </div>
-        );
-      },
-    },
+    // {
+    //   header: 'Actions',
+    //   accessor: (item) => {
+    //     const dateCreation = Date.parse(item.createdAt || item.dateEmprunt);
+    //     const estModifiable = Number.isFinite(dateCreation) && currentTime - dateCreation <= 120_000 && currentTime >= dateCreation;
+    //     const solde = item.montantRestant ?? item.montantTotalARembourser;
+    //     return (
+    //     <div className="flex items-center gap-2">
+    //       {solde > 0 && (
+    //         <>
+    //           {estModifiable && (
+    //           <button
+    //             onClick={() => openEditModal(item)}
+    //             className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
+    //             title="Modification disponible pendant deux minutes"
+    //           >
+    //             <Edit size={14} />
+    //           </button>
+    //           )}
+    //           <button
+    //             onClick={() => setIsPayOpen(true)}
+    //             className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+    //           >
+    //             <Banknote size={14} /> Payer
+    //           </button>
+    //         </>
+    //       )}
+    //     </div>
+    //     );
+    //   },
+    // },
   ];
 
   const totalEncours = emprunts
     .reduce((acc, curr) => acc + (curr.montantRestant ?? curr.montantTotalARembourser), 0);
+
+  const exportColumns: CsvColumn<Emprunt>[] = [
+    { header: 'Membre', value: (emprunt) => emprunt.nomMembre },
+    { header: 'Montant emprunté (FC)', value: (emprunt) => emprunt.montantEmprunte },
+    { header: 'Taux (%)', value: (emprunt) => emprunt.tauxInteret },
+    { header: 'Total à rembourser (FC)', value: (emprunt) => emprunt.montantTotalARembourser },
+    { header: 'Montant payé (FC)', value: (emprunt) => emprunt.montantPaye ?? 0 },
+    { header: 'Solde restant (FC)', value: (emprunt) => emprunt.montantRestant ?? emprunt.montantTotalARembourser },
+    { header: 'Date emprunt', value: (emprunt) => emprunt.dateEmprunt },
+    { header: 'Date échéance', value: (emprunt) => emprunt.dateEcheance },
+    { header: 'Dernier paiement', value: (emprunt) => emprunt.dateDernierPaiement || '—' },
+    { header: 'Statut', value: (emprunt) => emprunt.statut },
+  ];
 
   return (
     <div className="relative space-y-6">
@@ -380,23 +396,34 @@ export default function EmpruntsPage() {
             Suivez les prêts accordés aux membres de la Caisse Dev9 et les remboursements en temps réel.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
+          >
+            <PlusCircle size={18} /> Emprunter
+          </button>
           <button
             onClick={() => setIsPayOpen(true)}
             disabled={emprunts.every((emprunt) => (emprunt.montantRestant ?? emprunt.montantTotalARembourser) <= 0)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
           >
-            <Banknote size={18} /> Payer un emprunt
+            <Banknote size={18} /> Payer
           </button>
-          <button
-            onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
-          >
-            <PlusCircle size={18} /> Octroyer un Emprunt
-          </button>
+          <ExportCsvButton
+            filename="rapport-emprunts"
+            columns={exportColumns}
+            rows={emprunts}
+            label="Exporter"
+            disabled={isLoading}
+          />
         </div>
       </div>
 
+      {isLoading ? (
+        <PageSkeleton layout="cards-table" cards={2} columns={6} rows={6} />
+      ) : (
+        <>
       {/* Cartes KPI redessinées (plus compactes et épurées) */}
       <div className="grid grid-cols-2 gap-3">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
@@ -425,15 +452,14 @@ export default function EmpruntsPage() {
       </div>
 
       {/* Tableau des emprunts */}
-      {isLoading ? (
-        <div className="p-8 text-center text-slate-500">Chargement des emprunts...</div>
-      ) : (
         <DataTable
           data={emprunts}
           columns={columns}
           searchKey="nomMembre"
           searchPlaceholder="Rechercher par nom de membre..."
         />
+
+        </>
       )}
 
       {/* Modal d'ajout */}

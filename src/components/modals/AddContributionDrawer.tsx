@@ -186,7 +186,7 @@ export default function AddContributionDrawer({
             <option value="">-- Choisir un membre --</option>
             {membres.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.nomComplet || `${m.prenom} ${m.nom}`} ({m.telephone})
+                {m.nomComplet || `${m.prenom} ${m.nom}`}
               </option>
             ))}
           </select>
@@ -294,7 +294,7 @@ export default function AddContributionDrawer({
           <button
             type="submit"
             disabled={typeContribution === 'mois-special' && (!moisSpecialConfigure || moisSpecialDejaPaye)}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
             <CheckCircle2 size={16} />
             {typeContribution === 'mois-special' ? 'Valider le mois spécial' : 'Valider le versement'}

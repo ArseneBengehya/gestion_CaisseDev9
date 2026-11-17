@@ -174,7 +174,7 @@ export default function PayEmpruntModal({
 
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
               <button type="button" onClick={onClose} disabled={isSubmitting} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800">Annuler</button>
-              <button type="submit" disabled={!empruntSelectionne || !montantValide || depasseSolde || isSubmitting} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900">
+              <button type="submit" disabled={!empruntSelectionne || !montantValide || depasseSolde || isSubmitting} className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900">
                 {isSubmitting ? 'Enregistrement...' : 'Enregistrer le paiement'}
               </button>
             </div>

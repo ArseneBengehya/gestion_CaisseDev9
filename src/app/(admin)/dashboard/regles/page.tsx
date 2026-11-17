@@ -7,10 +7,13 @@ import AddPalierModal from '@/src/components/modals/AddPalierModal';
 import ViewPaliersModal from '@/src/components/modals/ViewPaliersModal';
 import Modal from '@/src/components/ui/Modal';
 import Toast from '@/src/components/ui/Toast';
+import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { synchroniserMontantPenalites } from '@/src/lib/penalties';
+import type { CsvColumn } from '@/src/lib/export-csv';
 
 interface PalierPret {
   id: string | number;
@@ -24,6 +27,12 @@ interface RegleItem {
   id: string;
   titre: string;
   contenu: string[];
+}
+
+interface RuleExportRow {
+  rubrique: string;
+  nom: string;
+  valeur: string;
 }
 
 interface ConfigDraft {
@@ -163,6 +172,36 @@ export default function ReglesEtParametresPage() {
 
     return () => unsub();
   }, []);
+
+  const exportRows: RuleExportRow[] = activeTab === 'regles'
+    ? regles.flatMap((regle) =>
+        regle.contenu.length > 0
+          ? regle.contenu.map((ligne, index) => ({
+              rubrique: 'Règle du groupe',
+              nom: `${regle.titre} — règle ${index + 1}`,
+              valeur: ligne,
+            }))
+          : [{ rubrique: 'Règle du groupe', nom: regle.titre, valeur: 'Aucun contenu' }]
+      )
+    : [
+        { rubrique: 'Caisse', nom: 'Date de début', valeur: dateDebutCaisse },
+        { rubrique: 'Cotisations', nom: 'Cotisation standard', valeur: `${cotisationMensuelle.toLocaleString('fr-FR')} FC` },
+        { rubrique: 'Cotisations', nom: 'Cotisation mois spécial', valeur: `${cotisationMoisSpecial.toLocaleString('fr-FR')} FC` },
+        { rubrique: 'Cotisations', nom: 'Mois spécial configuré', valeur: moisSpecial || 'Non défini' },
+        { rubrique: 'Pénalités', nom: 'État', valeur: penaliteRetardActive ? 'Activées' : 'Désactivées' },
+        { rubrique: 'Pénalités', nom: 'Seuil de retard', valeur: `${moisRetardAvantPenalite} mois impayés` },
+        { rubrique: 'Pénalités', nom: 'Montant', valeur: `${montantPenalite.toLocaleString('fr-FR')} FC` },
+        ...paliersPrets.map((palier, index) => ({
+          rubrique: 'Règles d’emprunt',
+          nom: `Palier ${index + 1}`,
+          valeur: `${palier.min.toLocaleString('fr-FR')}–${typeof palier.max === 'number' ? palier.max.toLocaleString('fr-FR') : palier.max} FC · ${palier.taux}% · ${palier.delai}`,
+        })),
+      ];
+  const exportColumns: CsvColumn<RuleExportRow>[] = [
+    { header: 'Rubrique', value: (row) => row.rubrique },
+    { header: activeTab === 'regles' ? 'Nom' : 'Paramètre', value: (row) => row.nom },
+    { header: 'Valeur', value: (row) => row.valeur },
+  ];
 
   const openSettingsModal = () => {
     setDraftConfig({
@@ -369,23 +408,25 @@ export default function ReglesEtParametresPage() {
           </p>
         </div>
 
-        <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-          <button
-            onClick={() => setActiveTab('regles')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-              activeTab === 'regles' ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
-            }`}
-          >
-            <BookOpen size={15} /> Règles
-          </button>
-          <button
-            onClick={() => setActiveTab('parametres')}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-              activeTab === 'parametres' ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
-            }`}
-          >
-            <Settings size={15} /> Paramètres
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            <button
+              onClick={() => setActiveTab('regles')}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+                activeTab === 'regles' ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+              }`}
+            >
+              <BookOpen size={15} /> Règles
+            </button>
+            <button
+              onClick={() => setActiveTab('parametres')}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+                activeTab === 'parametres' ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+              }`}
+            >
+              <Settings size={15} /> Paramètres
+            </button>
+          </div>
         </div>
       </div>
 
@@ -401,16 +442,25 @@ export default function ReglesEtParametresPage() {
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Consultez ou ajoutez les règles régissant le groupe.</p>
               </div>
             </div>
+            <div className='flex gap-2'>
             <button
               onClick={() => setIsRegleModalOpen(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors shrink-0 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors shrink-0 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
             >
               <Plus size={16} /> Ajouter une règle
             </button>
+            <ExportCsvButton
+              filename={activeTab === 'regles' ? 'regles-du-groupe' : 'parametres-de-la-caisse'}
+              columns={exportColumns}
+              rows={exportRows}
+              label={activeTab === 'regles' ? 'Exporter les règles' : 'Exporter les paramètres'}
+              disabled={isLoading}
+          />
+            </div>
           </div>
 
           {isLoading ? (
-            <div className="p-8 text-center text-slate-500">Chargement des règles...</div>
+            <PageSkeleton layout="activity-list" rows={3} />
           ) : regles.length === 0 ? (
             <div className="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
               Aucune règle enregistrée. Cliquez sur "Ajouter une règle" pour en créer une.
@@ -443,14 +493,16 @@ export default function ReglesEtParametresPage() {
               type="button"
               onClick={openSettingsModal}
               disabled={isLoading}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
             >
               <Pencil size={15} /> Modifier les paramètres
             </button>
           </div>
 
           {isLoading ? (
-            <div className="p-10 text-center text-sm text-slate-500">Chargement des paramètres...</div>
+            <div className="p-6">
+              <PageSkeleton layout="cards-table" cards={3} columns={3} rows={4} showSearch={false} />
+            </div>
           ) : (
             <div className="divide-y divide-slate-200 dark:divide-slate-800">
               <section className="flex flex-col items-center px-6 py-6">
@@ -562,7 +614,7 @@ export default function ReglesEtParametresPage() {
                     <button
                       type="button"
                       onClick={() => setIsPalierModalOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                      className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                     >
                       <Plus size={15} /> Configurer les pourcentages
                     </button>
@@ -660,7 +712,7 @@ export default function ReglesEtParametresPage() {
             <button type="button" onClick={() => setIsSettingsModalOpen(false)} disabled={isSavingSettings} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800">
               Annuler
             </button>
-            <button type="submit" disabled={isSavingSettings || isProcessingLogo || !!logoError} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
+            <button type="submit" disabled={isSavingSettings || isProcessingLogo || !!logoError} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
               <Save size={16} /> {isSavingSettings ? 'Enregistrement...' : 'Enregistrer'}
             </button>
           </div>
