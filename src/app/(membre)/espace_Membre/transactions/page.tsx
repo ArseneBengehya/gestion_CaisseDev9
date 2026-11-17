@@ -331,7 +331,16 @@ export default function TransactionsPage() {
 
       {activeTab === "cotisations" ? (
         <>
-      {/* 📊 CARTES KPI SYNCHRONISÉES AU-DESSUS DU TABLEAU */}
+
+      {/* En-tête */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mes contributions</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          Suivez vos versements mensuels enregistrés dans votre caisse.
+        </p>
+      </div>
+      
+      {/* 📊 CARTES KPI SYNCHRONISÉES */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Mois payés */}
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
@@ -391,13 +400,7 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* En-tête */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mes contributions</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          Suivez vos versements mensuels enregistrés dans votre caisse.
-        </p>
-      </div>
+
 
       <div className="grid grid-cols-1 gap-8">
         {/* 📋 TABLEAU DES CONTRIBUTIONS */}
