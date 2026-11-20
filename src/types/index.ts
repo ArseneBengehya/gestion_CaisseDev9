@@ -30,13 +30,43 @@ export interface Contribution {
   id: string;
   membreId: string;
   membreNomComplet?: string;
-  montantTotal: number;
-  nombreMoisPayes: number;
-  moisCouverts: string[]; // Exemple: ['2026-09', '2026-10']
+  montantTotal?: number;
+  montantVerse?: number;
+  nombreMoisPayes?: number;
+  nombreMois?: number;
+  moisCouverts?: string[]; // Exemple: ['2026-09', '2026-10']
+  repartition?: AllocationCotisation[];
+  typeContribution?: string;
+  moisSpecial?: string;
   datePaiement: string;
-  modePaiement: 'CASH' | 'MOBILE_MONEY' | 'VIREMENT';
+  modePaiement: 'CASH' | 'MOBILE_MONEY' | 'VIREMENT' | string;
   referenceTransaction?: string;
   note?: string;
+}
+
+export type StatutMoisCotisation = 'NON_PAYE' | 'EN_COURS' | 'PAYE';
+export type TypeCotisation = 'NORMALE' | 'SPECIALE';
+
+export interface AllocationCotisation {
+  mois: string; // Format YYYY-MM
+  montantVerse: number;
+  type: TypeCotisation;
+}
+
+export interface EtatMoisCotisation {
+  mois: string;
+  montantRequis: number;
+  montantPaye: number;
+  statut: StatutMoisCotisation;
+  type: TypeCotisation;
+}
+
+export interface ApercuRepartitionCotisation {
+  allocations: AllocationCotisation[];
+  moisSoldes: string[];
+  moisEnCours?: string;
+  montantAvance: number;
+  montantRestant: number;
 }
 
 // 3. Vue synthétique des contributions d'un membre pour la page Contributions
@@ -50,6 +80,16 @@ export interface StatutMembreContribution {
   moisImpayesKeys?: string[]; // Ex: ['2026-03']
   moisFutursPayes: string[];  // ex: ['2026-11', '2026-12']
   dernierPaiementDate?: string;
+  historiquePaiements?: {
+    mois: string;
+    montant: number;
+    montantRequis?: number;
+    montantPaye?: number;
+    statut?: StatutMoisCotisation;
+    modePaiement: string;
+    datePaiement: string;
+  }[];
+  etatsMois?: EtatMoisCotisation[];
 }
 
 // 4. Structure d'une Dépense
@@ -66,7 +106,11 @@ export interface Depense {
 // 5. Structure des Règles applicatives de la caisse
 export interface RegleCaisse {
   id: string;
+  titre?: string;
+  contenu?: string[];
   cotisationMensuelle: number; // Ex: 5000
+  cotisationMoisSpecial?: number;
+  moisSpecial?: string; // Numéro du mois (1-12), sans année
   devise: string; // Ex: 'FC', 'USD'
   jourLimitePaiement: number; // Ex: Le 5 de chaque mois
   penaliteRetardActive: boolean;
@@ -85,5 +129,26 @@ export interface Emprunt {
   montantTotalARembourser: number; // Montant + Intérêt calculé
   dateEmprunt: string;
   dateEcheance: string;
-  statut: 'En cours' | 'Remboursé' | 'En retard';
+  statut: 'En attente' | 'En cours' | 'À jour' | 'Remboursé' | 'En retard';
+  montantPaye?: number;
+  montantRestant?: number;
+  dateDernierPaiement?: string;
+  createdAt?: string;
+}
+
+// Structure d'une Notification pour le membre
+export interface NotificationMembre {
+  id: string;
+  membreId: string; // ID du membre concerné ou "TOUS"
+  titre: string;
+  message: string;
+  type: 'succes' | 'info' | 'alerte';
+  date: string;
+  lu: boolean;
+}
+
+export interface DepenseNotificationData {
+  montant: number;
+  motif: string;
+  approuvePar: string;
 }

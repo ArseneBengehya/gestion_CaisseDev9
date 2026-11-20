@@ -47,7 +47,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
           <input
             type="text"
             required
-            placeholder="Entrer le titre de la regle"
+            placeholder="Entrez le titre de la regle"
             value={titre}
             onChange={(e) => setTitre(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -61,7 +61,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
           <textarea
             required
             rows={5}
-            placeholder="Entrer les regles de cette section"
+            placeholder="parlez en detaille de la regle en question"
             value={contenu}
             onChange={(e) => setContenu(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
@@ -80,7 +80,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white transition shadow-sm disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-blue-500 hover:bg-blue-600 text-white dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white transition shadow-sm disabled:opacity-50"
           >
             {isSubmitting ? 'Enregistrement...' : 'Valider et enregistrer'}
           </button>

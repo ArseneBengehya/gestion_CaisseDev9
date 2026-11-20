@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Menu, Loader2, UserCheck } from 'lucide-react';
+import { User, Menu, UserCheck } from 'lucide-react';
 import Sidebar from '@/src/components/Sidebar';
 import ThemeToggle from '@/src/components/ui/ThemeToggle';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 import Link from 'next/link';
 
 // Import de Firestore
@@ -80,11 +81,8 @@ export default function AdminLayout({
 
   if (!isAuthorized) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-50 text-slate-700 dark:bg-slate-950 dark:text-slate-100">
-        <div className="flex items-center gap-3">
-          <Loader2 size={24} className="animate-spin text-slate-500 dark:text-slate-300" />
-          <span className="text-sm font-medium">Chargement du profil administrateur...</span>
-        </div>
+      <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 sm:p-8">
+        <PageSkeleton layout="dashboard" />
       </div>
     );
   }

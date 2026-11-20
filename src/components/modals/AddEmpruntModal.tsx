@@ -4,23 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { Coins, Calendar, Percent, User, Info } from 'lucide-react';
 import { Membre } from '@/src/types';
 import Modal from '../ui/Modal';
-
-// Import Firestore pour lire la configuration des paliers
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/src/lib/firebase';
-
-interface PalierPret {
-  id: number;
-  min: number;
-  max: number | string;
-  delai: string;
-  taux: number;
-}
+import { dateEcheanceSelonDelai, PalierPret, trouverPalierPret } from '@/src/lib/loans';
 
 interface AddEmpruntModalProps {
   isOpen: boolean;
   onClose: () => void;
   membres: Membre[];
+  paliers: PalierPret[];
   onSubmit: (data: {
     membreId: string;
     montantEmprunte: number;
@@ -33,49 +23,22 @@ export default function AddEmpruntModal({
   isOpen,
   onClose,
   membres,
+  paliers,
   onSubmit,
 }: AddEmpruntModalProps) {
   const [membreId, setMembreId] = useState('');
   const [montant, setMontant] = useState('');
-  const [tauxInteret, setTauxInteret] = useState('20'); // Valeur par défaut
   const [dateEcheance, setDateEcheance] = useState('');
 
-  // Configuration des paliers récupérée depuis Firestore
-  const [paliers, setPaliers] = useState<PalierPret[]>([
-    { id: 1, min: 20000, max: 50000, delai: '1 mois', taux: 20 },
-    { id: 2, min: 60000, max: 70000, delai: '2 mois', taux: 15 },
-    { id: 3, min: 80000, max: 100000, delai: '3 mois', taux: 10 },
-    { id: 4, min: 100000, max: 'Et plus', delai: '4 mois', taux: 5 },
-  ]);
-
-  // Écouter les paramètres de la caisse depuis Firestore
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'caisse_config'), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().paliersPrets) {
-        setPaliers(docSnap.data().paliersPrets);
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // Détecter le montant saisi et appliquer automatiquement le bon taux
-  useEffect(() => {
-    const val = parseFloat(montant);
-    if (!val || val <= 0) return;
-
-    // Trouver le palier correspondant
-    const palierTrouve = paliers.find((p) => {
-      const maxVal = typeof p.max === 'number' ? p.max : Infinity;
-      return val >= p.min && val <= maxVal;
-    });
-
-    if (palierTrouve) {
-      setTauxInteret(palierTrouve.taux.toString());
-    }
-  }, [montant, paliers]);
-
   const montantNum = parseFloat(montant) || 0;
-  const tauxNum = parseFloat(tauxInteret) || 0;
+  const palierTrouve = trouverPalierPret(montantNum, paliers);
+  const dateEcheanceMax = palierTrouve ? dateEcheanceSelonDelai(palierTrouve.delai) : null;
+
+  useEffect(() => {
+    setDateEcheance(dateEcheanceMax || '');
+  }, [dateEcheanceMax]);
+
+  const tauxNum = palierTrouve?.taux || 0;
   const montantInteret = (montantNum * tauxNum) / 100;
   const totalARembourser = montantNum + montantInteret;
 
@@ -85,11 +48,19 @@ export default function AddEmpruntModal({
       alert('Veuillez remplir tous les champs obligatoires.');
       return;
     }
+    if (!palierTrouve) {
+      alert('Le montant ne correspond à aucun palier configuré dans les paramètres.');
+      return;
+    }
+    if (dateEcheanceMax && dateEcheance > dateEcheanceMax) {
+      alert(`La date d’échéance doit respecter le délai de ${palierTrouve.delai} configuré.`);
+      return;
+    }
 
     onSubmit({
       membreId,
       montantEmprunte: montantNum,
-      tauxInteret: tauxNum,
+      tauxInteret: palierTrouve.taux,
       dateEcheance,
     });
 
@@ -142,36 +113,30 @@ export default function AddEmpruntModal({
               min="1000"
               value={montant}
               onChange={(e) => setMontant(e.target.value)}
-              placeholder="Entrer montant"
+              placeholder="tapez le montant à emprunter"
               className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
             />
           </div>
         </div>
 
-        {/* Taux d'intérêt (Automatique & Modifiable) */}
+        {/* Taux d'intérêt défini par le palier configuré */}
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
               Taux d'intérêt (%)
             </label>
             <span className="text-[11px] text-blue-600 dark:text-blue-400 flex items-center gap-1 font-medium">
-              <Info size={12} /> Calculé selon les règles
+              <Info size={12} /> Selon le palier
             </span>
           </div>
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
               <Percent size={16} />
             </span>
-            <input
-              type="number"
-              required
-              min="0"
-              step="0.5"
-              value={tauxInteret}
-              onChange={(e) => setTauxInteret(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
-            />
+            <input type="text" readOnly value={palierTrouve ? `${palierTrouve.taux}%` : ''} placeholder="Aucun palier pour ce montant" className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg font-medium" />
           </div>
+          {montantNum > 0 && !palierTrouve && <p className="mt-1 text-xs text-rose-600">Ce montant ne respecte aucun palier configuré.</p>}
+          {palierTrouve && <p className="mt-1 text-xs text-slate-500">Délai configuré : {palierTrouve.delai}</p>}
         </div>
 
         {/* Carte de calcul dynamique de l'intérêt et du total */}
@@ -181,7 +146,7 @@ export default function AddEmpruntModal({
               Récapitulatif de l'Emprunt
             </p>
             <div className="flex justify-between text-sm text-slate-700 dark:text-slate-300">
-              <span>Intérêt ({tauxInteret}%) :</span>
+              <span>Intérêt ({tauxNum}%) :</span>
               <span className="font-bold">+{montantInteret.toLocaleString()} FC</span>
             </div>
             <div className="flex justify-between text-base font-extrabold text-blue-700 dark:text-blue-300 pt-1 border-t border-blue-200 dark:border-blue-900">
@@ -204,6 +169,8 @@ export default function AddEmpruntModal({
               type="date"
               required
               value={dateEcheance}
+              min={new Date().toISOString().slice(0, 10)}
+              max={dateEcheanceMax || undefined}
               onChange={(e) => setDateEcheance(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
             />
@@ -221,7 +188,8 @@ export default function AddEmpruntModal({
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            disabled={!palierTrouve}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
             Valider l'emprunt
           </button>

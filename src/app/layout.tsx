@@ -4,6 +4,7 @@ import "@mantine/core/styles.css"; // Importation des styles Mantine
 import "./globals.css"; // Importation des styles globaux
 import { ColorSchemeScript, MantineProvider } from "@mantine/core";
 import { NotificationProvider } from "../context/NotificationContext";
+import PwaRuntime from "../components/PwaRuntime";
 
 const interSans = Inter({
   variable: "--font-inter-sans",
@@ -18,6 +19,7 @@ const robotoMono = Roboto_Mono({
 export const metadata: Metadata = {
   title: "Caisse Dev9",
   description: "Application de gestion de caisse et tontine",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -34,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col">
         <MantineProvider defaultColorScheme="auto">
           <NotificationProvider>
+            <PwaRuntime />
             {children}
           </NotificationProvider>
         </MantineProvider>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Calendar, CreditCard } from 'lucide-react';
+import { Calendar, CreditCard, Clock } from 'lucide-react';
 import { StatutMembreContribution } from '@/src/types';
 import Modal from '../ui/Modal';
 
@@ -21,6 +21,8 @@ export default function ViewHistoriqueModal({
   const [isFullScreen, setIsFullScreen] = useState(true);
 
   if (!data) return null;
+  const historyRows = [...(data.historiquePaiements || [])]
+    .sort((a, b) => Date.parse(b.datePaiement) - Date.parse(a.datePaiement) || b.mois.localeCompare(a.mois));
 
   return (
     <Modal
@@ -36,19 +38,19 @@ export default function ViewHistoriqueModal({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
           <div>
             <p className="text-xs font-medium text-slate-500">Total Versé</p>
-            <p className="text-xl font-bold text-emerald-600 mt-1">
+            <p className="text-xl font-serif mt-1">
               {data.montantTotalCotise.toLocaleString()} FC
             </p>
           </div>
           <div>
             <p className="text-xs font-medium text-slate-500">Mois Payés</p>
-            <p className="text-xl font-bold text-blue-600 mt-1">
+            <p className="text-xl font-serif  mt-1">
               {data.moisPayes.length} mois
             </p>
           </div>
           <div>
             <p className="text-xs font-medium text-slate-500">Dette Actuelle</p>
-            <p className={`text-xl font-bold mt-1 ${data.detteActuelle > 0 ? 'text-rose-600' : 'text-slate-700'}`}>
+            <p className={`text-xl font-serif mt-1 ${data.detteActuelle > 0 }`}>
               {data.detteActuelle > 0 ? `${data.detteActuelle.toLocaleString()} FC` : 'Aucune'}
             </p>
           </div>
@@ -67,38 +69,50 @@ export default function ViewHistoriqueModal({
                   <th className="px-6 py-3">Mois Concerné</th>
                   <th className="px-6 py-3">Montant</th>
                   <th className="px-6 py-3">Mode de Paiement</th>
+                  <th className="px-6 py-3">Date et heure</th>
                   <th className="px-6 py-3">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-sm text-slate-700">
-                {data.moisPayes.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-8 text-center text-slate-400">
-                      Aucun mois payé pour le moment.
+                {historyRows.map((paiement, index) => {
+                  const [year, month] = paiement.mois.split('-').map(Number);
+                  const moisLabel = year && month
+                    ? new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+                    : paiement.mois;
+                  const status = paiement.statut || (paiement.montantRequis !== undefined && paiement.montantPaye !== undefined
+                    ? paiement.montantPaye >= paiement.montantRequis ? 'PAYE' : 'EN_COURS'
+                    : 'PAYE');
+                  const statusLabel = status === 'PAYE' ? 'Payé' : status === 'EN_COURS' ? 'En cours' : 'Non payé';
+                  return (
+                  <tr key={`${paiement.mois}-${paiement.datePaiement}-${index}`} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-medium flex items-center gap-2">
+                      <Calendar size={16} />
+                      {moisLabel}
+                    </td>
+                    <td className="px-6 py-4 font-serif ">{paiement.montant.toLocaleString('fr-FR')} FC</td>
+                    <td className="px-6 py-4 flex items-center gap-1.5 text-slate-600">
+                      <CreditCard size={16} className="text-slate-400" />
+                      {paiement.modePaiement}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-slate-600">
+                      {paiement.datePaiement
+                        ? <span className="inline-flex items-center gap-1.5"><Clock size={14} className="text-slate-400" />{new Date(paiement.datePaiement).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        : '—'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        status === 'PAYE'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : status === 'EN_COURS'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {statusLabel}
+                      </span>
                     </td>
                   </tr>
-                ) : (
-                  data.moisPayes.map((mois, index) => (
-                    <tr key={index} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 font-medium flex items-center gap-2">
-                        <Calendar size={16} className="text-blue-500" />
-                        {mois}
-                      </td>
-                      <td className="px-6 py-4 font-semibold text-emerald-600">
-                        {montantMensuel.toLocaleString()} FC
-                      </td>
-                      <td className="px-6 py-4 flex items-center gap-1.5 text-slate-600">
-                        <CreditCard size={16} className="text-slate-400" />
-                        Cash / Espèces
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                          Payé
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -112,8 +126,8 @@ export default function ViewHistoriqueModal({
             </h4>
             <div className="flex flex-wrap gap-2">
               {data.moisFutursPayes.map((mois, idx) => (
-                <span key={idx} className="px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold">
-                  {mois} (Avance)
+                <span key={idx} className="px-3 py-1  rounded-lg text-xs font-semibold">
+                  {mois}
                 </span>
               ))}
             </div>

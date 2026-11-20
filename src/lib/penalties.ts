@@ -1,5 +1,8 @@
-import { collection, doc, getDocs, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDocs, query, runTransaction, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import { moisImpayesPour, nombreMoisAttendus } from '@/src/lib/contribution-months';
+
+export { moisImpayesPour, nombreMoisAttendus };
 
 export interface Penalite {
   id: string;
@@ -8,76 +11,130 @@ export interface Penalite {
   moisDeclenchementKey: string;
   montantDu: number;
   montantPaye: number;
-  statut: 'A_PAYER' | 'PARTIELLE' | 'PAYEE';
+  statut: string;
   dateCreation: string;
   dateDernierPaiement?: string;
 }
 
-export const soldePenalite = (penalite: Pick<Penalite, 'montantDu' | 'montantPaye'>) =>
-  Math.max(0, penalite.montantDu - penalite.montantPaye);
-
-export function nombreMoisAttendus(dateDebutCaisse: string, dateReference = new Date()) {
-  const [anneeDebut, moisDebut] = dateDebutCaisse.slice(0, 7).split('-').map(Number);
-  if (!anneeDebut || !moisDebut) return 0;
-
-  const nombreMois =
-    (dateReference.getFullYear() - anneeDebut) * 12 +
-    (dateReference.getMonth() + 1 - moisDebut) +
-    1;
-  return Math.max(0, nombreMois);
+export interface AllocationPaiementPenalite {
+  penaliteId: string;
+  montantVerse: number;
 }
 
-export function moisImpayesPour(
-  dateDebutCaisse: string,
-  nombreMoisAttendus: number,
-  contributions: { nombreMois: number; moisSelectionnes?: string[] }[]
-) {
-  const [startYear, startMonth] = dateDebutCaisse.slice(0, 7).split('-').map(Number);
-  if (!startYear || !startMonth) return [];
-
-  const moisAttendus = Array.from({ length: Math.max(0, nombreMoisAttendus) }, (_, index) => {
-    const date = new Date(startYear, startMonth - 1 + index, 1);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-  });
-  const moisPayes = new Set<string>();
-
-  contributions.forEach((contribution) => {
-    contribution.moisSelectionnes?.forEach((mois) => moisPayes.add(mois.slice(0, 7)));
-  });
-
-  contributions.forEach((contribution) => {
-    if (Array.isArray(contribution.moisSelectionnes)) return;
-    let index = 0;
-    for (let mois = 0; mois < contribution.nombreMois && index < 1200; mois++) {
-      while (moisPayes.has(moisAttendus[index] || '') && index < 1200) index++;
-      if (moisAttendus[index]) moisPayes.add(moisAttendus[index]);
-      index++;
-    }
-  });
-
-  return moisAttendus.filter((mois) => !moisPayes.has(mois));
+export interface PaiementPenalite {
+  id: string;
+  membreId: string;
+  montantVerse: number;
+  modePaiement: string;
+  datePaiement: string;
+  penalites: AllocationPaiementPenalite[];
 }
 
-export async function assurerPenalites(
+export const soldePenalite = (penalite: Pick<Penalite, 'montantDu' | 'montantPaye'>): number =>
+  Math.max(0, (Number(penalite.montantDu) || 0) - (Number(penalite.montantPaye) || 0));
+
+export const enregistrerPaiementPenalite = async (
   membreId: string,
-  moisImpayes: string[],
-  seuilMois: number,
-  montantPenalite: number
-) {
-  if (!membreId || seuilMois < 1 || montantPenalite <= 0) return;
+  montantVerse: number,
+  modePaiement: string
+): Promise<PaiementPenalite> => {
+  if (!membreId.trim()) throw new Error('Un membre doit être sélectionné pour payer une pénalité.');
+  if (!Number.isSafeInteger(montantVerse) || montantVerse <= 0) {
+    throw new Error('Le montant du paiement doit être un nombre entier supérieur à zéro.');
+  }
+  if (!modePaiement.trim()) throw new Error('Le mode de paiement doit être précisé.');
 
-  for (let index = seuilMois - 1; index < moisImpayes.length; index += seuilMois) {
-    const moisDeclenchement = index + 1;
+  const penalitesQuery = query(collection(db, 'penalites'), where('membreId', '==', membreId));
+  const snapshot = await getDocs(penalitesQuery);
+  const penalites = snapshot.docs
+    .map((penaliteDoc) => {
+      const data = penaliteDoc.data();
+      return {
+        ref: penaliteDoc.ref,
+        id: penaliteDoc.id,
+        moisDeclenchementKey: String(data.moisDeclenchementKey || ''),
+      };
+    })
+    .sort((a, b) => a.moisDeclenchementKey.localeCompare(b.moisDeclenchementKey));
+
+  if (penalites.length === 0) throw new Error('Ce membre n’a aucune pénalité enregistrée.');
+
+  const paymentRef = doc(collection(db, 'paiements_penalites'));
+  const datePaiement = new Date().toISOString();
+
+  return runTransaction(db, async (transaction) => {
+    const freshPenalites = await Promise.all(penalites.map(({ ref }) => transaction.get(ref)));
+    const remaining = freshPenalites.map((penaliteDoc, index) => {
+      if (!penaliteDoc.exists()) return null;
+      const data = penaliteDoc.data();
+      return {
+        ref: penaliteDoc.ref,
+        id: penalites[index].id,
+        montantDu: Number(data.montantDu) || 0,
+        montantPaye: Number(data.montantPaye) || 0,
+      };
+    }).filter((penalite): penalite is NonNullable<typeof penalite> => penalite !== null)
+      .map((penalite) => ({ ...penalite, solde: soldePenalite(penalite) }))
+      .filter((penalite) => penalite.solde > 0);
+
+    const totalDu = remaining.reduce((total, penalite) => total + penalite.solde, 0);
+    if (totalDu === 0) throw new Error('Ce membre n’a plus de pénalité à payer.');
+    if (montantVerse > totalDu) {
+      throw new Error(`Le montant dépasse le solde dû (${totalDu.toLocaleString()} FC).`);
+    }
+
+    let montantRestant = montantVerse;
+    const allocations: AllocationPaiementPenalite[] = [];
+    remaining.forEach((penalite) => {
+      if (montantRestant <= 0) return;
+      const montantAffecte = Math.min(montantRestant, penalite.solde);
+      const nouveauMontantPaye = penalite.montantPaye + montantAffecte;
+      transaction.update(penalite.ref, {
+        montantPaye: nouveauMontantPaye,
+        statut: nouveauMontantPaye >= penalite.montantDu ? 'PAYE' : 'EN_COURS',
+        dateDernierPaiement: datePaiement,
+      });
+      allocations.push({ penaliteId: penalite.id, montantVerse: montantAffecte });
+      montantRestant -= montantAffecte;
+    });
+
+    const paiement: PaiementPenalite = {
+      id: paymentRef.id,
+      membreId,
+      montantVerse,
+      modePaiement,
+      datePaiement,
+      penalites: allocations,
+    };
+    transaction.set(paymentRef, paiement);
+    return paiement;
+  });
+};
+
+export const assurerPenalites = async (
+  membreId: string,
+  moisImpayes: readonly string[],
+  moisRetardAvantPenalite: number,
+  montantPenalite: number
+): Promise<void> => {
+  if (!membreId.trim()) throw new Error('Un membre doit être précisé pour enregistrer une pénalité.');
+  if (!Number.isInteger(moisRetardAvantPenalite) || moisRetardAvantPenalite < 1) {
+    throw new Error('Le seuil de pénalité doit être un nombre entier positif.');
+  }
+  if (!Number.isFinite(montantPenalite) || montantPenalite <= 0) {
+    throw new Error('Le montant de pénalité doit être supérieur à zéro.');
+  }
+
+  for (let index = moisRetardAvantPenalite - 1; index < moisImpayes.length; index += moisRetardAvantPenalite) {
     const moisDeclenchementKey = moisImpayes[index];
-    const id = `${membreId}_${moisDeclenchementKey}`;
-    const penaliteRef = doc(db, 'penalites', id);
+    const penaliteRef = doc(db, 'penalites', `${membreId}_${moisDeclenchementKey}`);
 
     await runTransaction(db, async (transaction) => {
-      const penaliteSnapshot = await transaction.get(penaliteRef);
-      if (!penaliteSnapshot.exists()) {
+      const penaliteExistante = await transaction.get(penaliteRef);
+      if (!penaliteExistante.exists()) {
         transaction.set(penaliteRef, {
           membreId,
-          moisDeclenchement,
+          moisDeclenchement: index + 1,
           moisDeclenchementKey,
           montantDu: montantPenalite,
           montantPaye: 0,
@@ -87,28 +144,31 @@ export async function assurerPenalites(
       }
     });
   }
-}
+};
 
-export async function synchroniserMontantPenalites(montantPenalite: number) {
+export const synchroniserMontantPenalites = async (montantPenalite: number): Promise<void> => {
   if (!Number.isFinite(montantPenalite) || montantPenalite < 0) {
-    throw new Error('Le montant de pénalité doit être positif ou nul.');
+    throw new Error('Le montant de pénalité doit être un nombre positif ou nul.');
   }
 
   const snapshot = await getDocs(collection(db, 'penalites'));
-  await Promise.all(snapshot.docs.map(async (penaliteDoc) => {
-    await runTransaction(db, async (transaction) => {
-      const current = await transaction.get(penaliteDoc.ref);
-      if (!current.exists()) return;
+  const updates = snapshot.docs.flatMap((penaliteDoc) => {
+    const data = penaliteDoc.data();
+    const montantDu = Number(data.montantDu) || 0;
+    const montantPaye = Number(data.montantPaye) || 0;
+    if (soldePenalite({ montantDu, montantPaye }) === 0) return [];
 
-      const data = current.data();
-      const montantPaye = Number(data.montantPaye) || 0;
-      const ancienMontantDu = Number(data.montantDu) || 0;
-      if (montantPaye >= ancienMontantDu || ancienMontantDu === montantPenalite) return;
-      const montantDu = montantPenalite;
-      transaction.update(penaliteDoc.ref, {
-        montantDu,
-        statut: montantPaye >= montantDu ? 'PAYEE' : montantPaye > 0 ? 'PARTIELLE' : 'A_PAYER',
-      });
+    const nouveauMontantDu = Math.max(montantPaye, montantPenalite);
+    return nouveauMontantDu === montantDu
+      ? []
+      : [{ ref: penaliteDoc.ref, montantDu: nouveauMontantDu }];
+  });
+
+  for (let index = 0; index < updates.length; index += 450) {
+    const batch = writeBatch(db);
+    updates.slice(index, index + 450).forEach(({ ref, montantDu }) => {
+      batch.update(ref, { montantDu });
     });
-  }));
-}
+    await batch.commit();
+  }
+};

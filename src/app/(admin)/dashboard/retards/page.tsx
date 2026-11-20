@@ -1,22 +1,37 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, Send, PhoneCall, ShieldAlert, Loader2, CheckCircle2 } from 'lucide-react';
 import { Membre } from '@/src/types';
 import Toast from '@/src/components/ui/Toast';
-import { assurerPenalites, moisImpayesPour, nombreMoisAttendus, Penalite, soldePenalite } from '@/src/lib/penalties';
+import {
+  assurerPenalites,
+  Penalite,
+  soldePenalite,
+} from '@/src/lib/penalties';
+import {
+  genererEtatsMoisCotisation,
+  normaliserMoisSpecial,
+  type ContributionPaymentRecord,
+} from '@/src/lib/contribution-payments';
+import { normaliserDateFirestore } from '@/src/lib/contribution-months';
+import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
+import type { CsvColumn } from '@/src/lib/export-csv';
 
 // Import Firestore
 import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 
-interface ContributionData {
+interface ContributionData extends ContributionPaymentRecord {
   id: string;
   membreId: string;
   nombreMois: number;
-  moisSelectionnes?: string[];
+  moisCouverts?: string[];
   montantVerse: number;
   datePaiement: string;
+  typeContribution?: string;
+  moisSpecial?: string;
 }
 
 type PenaliteData = Penalite;
@@ -36,11 +51,14 @@ interface MembreEnRetard {
 export default function RetardsPage() {
   const [membres, setMembres] = useState<Membre[]>([]);
   const [contributions, setContributions] = useState<ContributionData[]>([]);
-  const [penalites, setPenalites] = useState<PenaliteData[]>([]);
+  const [contributionsSpeciales, setContributionsSpeciales] = useState<ContributionData[]>([]);
   const [membresRetard, setMembresRetard] = useState<MembreEnRetard[]>([]);
+  const [penalites, setPenalites] = useState<PenaliteData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [contributionsLoaded, setContributionsLoaded] = useState(false);
+  const [contributionsSpecialesLoaded, setContributionsSpecialesLoaded] = useState(false);
+  const [membresLoaded, setMembresLoaded] = useState(false);
   
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sentSuccessId, setSentSuccessId] = useState<string | null>(null);
@@ -58,9 +76,16 @@ export default function RetardsPage() {
     }, 5000);
   };
 
+  const contributionsPourStatut = useMemo(
+    () => [...contributions, ...contributionsSpeciales],
+    [contributions, contributionsSpeciales]
+  );
+
   const [caisseConfig, setCaisseConfig] = useState({
     dateDebutCaisse: '2025-01-01',
     cotisationMensuelle: 5000,
+    cotisationMoisSpecial: 10000,
+    moisSpecial: '',
     penaliteRetardActive: true,
     moisRetardAvantPenalite: 2,
     montantPenalite: 1000,
@@ -72,18 +97,26 @@ export default function RetardsPage() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const cotisationMensuelle = Number(data.cotisationMensuelle ?? 5000);
+        const moisRetardAvantPenalite = Number(data.moisRetardAvantPenalite ?? 2);
         const montantPenalite = Number(data.montantPenalite ?? 1000);
+        const cotisationMoisSpecial = Number(data.cotisationMoisSpecial ?? 10000);
         setCaisseConfig({
           dateDebutCaisse: data.dateDebutCaisse || '2025-01-01',
           cotisationMensuelle: Number.isFinite(cotisationMensuelle) ? cotisationMensuelle : 5000,
+          cotisationMoisSpecial: Number.isFinite(cotisationMoisSpecial) ? cotisationMoisSpecial : 10000,
+          moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : ''),
           penaliteRetardActive: data.penaliteRetardActive ?? true,
-          moisRetardAvantPenalite: Math.max(1, Number(data.moisRetardAvantPenalite) || 2),
+          moisRetardAvantPenalite:
+            Number.isFinite(moisRetardAvantPenalite) && moisRetardAvantPenalite >= 1
+              ? Math.floor(moisRetardAvantPenalite)
+              : 2,
           montantPenalite: Number.isFinite(montantPenalite) ? montantPenalite : 1000,
         });
       }
       setConfigLoaded(true);
     }, (error) => {
       console.error('Erreur de chargement des paramètres de la caisse :', error);
+      setConfigLoaded(true);
       showToast('error', 'Impossible de charger les paramètres de pénalité.');
     });
 
@@ -110,11 +143,16 @@ export default function RetardsPage() {
           montantTotalCotise: 0,
           moisPayes: [],
           avancesMoisFuturs: 0,
-          statutCotisation: 'RETARD',
-        } as any;
+          statutCotisation: 'Retard',
+        } as Membre;
       });
 
       setMembres(list);
+      setMembresLoaded(true);
+    }, (error) => {
+      console.error('Erreur de chargement des membres :', error);
+      setMembresLoaded(true);
+      showToast('error', 'Impossible de charger les membres pour calculer les retards.');
     });
 
     return () => unsubMembres();
@@ -129,63 +167,113 @@ export default function RetardsPage() {
           id: d.id,
           membreId: data.membreId || '',
           nombreMois: Number(data.nombreMois) || 0,
-          moisSelectionnes: Array.isArray(data.moisSelectionnes)
+          moisCouverts: Array.isArray(data.moisSelectionnes)
             ? data.moisSelectionnes
-            : Array.isArray(data.moisCouverts) ? data.moisCouverts : undefined,
+            : Array.isArray(data.moisCouverts)
+              ? data.moisCouverts
+              : undefined,
           montantVerse: Number(data.montantVerse) || 0,
           datePaiement: data.datePaiement || '',
+          typeContribution: typeof data.typeContribution === 'string' ? data.typeContribution : undefined,
+          moisSpecial: typeof data.moisSpecial === 'string' ? data.moisSpecial : undefined,
+          repartition: data.repartition,
         };
       });
 
       setContributions(list);
       setContributionsLoaded(true);
-      setIsLoading(false);
     }, (error) => {
       console.error('Erreur de chargement des contributions :', error);
-      showToast('error', 'Impossible de charger les contributions pour calculer les pénalités.');
+      setContributionsLoaded(true);
+      showToast('error', 'Impossible de charger les contributions pour calculer les retards.');
     });
 
     return () => unsubContributions();
   }, []);
 
   useEffect(() => {
-    const unsubPenalites = onSnapshot(collection(db, 'penalites'), (snapshot) => {
-      setPenalites(snapshot.docs.map((d) => ({
-        id: d.id,
-        membreId: d.data().membreId || '',
-        moisDeclenchement: Number(d.data().moisDeclenchement) || 0,
-        moisDeclenchementKey: d.data().moisDeclenchementKey || '',
-        montantDu: Number(d.data().montantDu) || 0,
-        montantPaye: Number(d.data().montantPaye) || 0,
-        statut: d.data().statut || 'A_PAYER',
-        dateCreation: d.data().dateCreation || '',
-        dateDernierPaiement: d.data().dateDernierPaiement,
-      } as PenaliteData)));
+    const unsubscribe = onSnapshot(collection(db, 'contributions_speciales'), (snapshot) => {
+      setContributionsSpeciales(snapshot.docs.map((document) => {
+        const data = document.data();
+        const moisSpecial = typeof data.moisSpecial === 'string' ? data.moisSpecial : '';
+        return {
+          id: document.id,
+          membreId: typeof data.membreId === 'string' ? data.membreId : '',
+          nombreMois: 1,
+          moisCouverts: moisSpecial ? [moisSpecial] : [],
+          montantVerse: Number(data.montantVerse) || 0,
+          datePaiement: normaliserDateFirestore(data.datePaiement),
+          typeContribution: 'MOIS_SPECIAL',
+          moisSpecial,
+        };
+      }));
+      setContributionsSpecialesLoaded(true);
+    }, (error) => {
+      console.error('Erreur de chargement des contributions spéciales :', error);
+      setContributionsSpecialesLoaded(true);
+      showToast('error', 'Impossible de charger les contributions spéciales pour calculer les retards.');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'penalites'), (snapshot) => {
+      setPenalites(snapshot.docs.map((document) => {
+        const data = document.data();
+        return {
+          id: document.id,
+          membreId: data.membreId || '',
+          moisDeclenchement: Number(data.moisDeclenchement) || 0,
+          moisDeclenchementKey: data.moisDeclenchementKey || '',
+          montantDu: Number(data.montantDu) || 0,
+          montantPaye: Number(data.montantPaye) || 0,
+          statut: data.statut || 'A_PAYER',
+          dateCreation: data.dateCreation || '',
+          dateDernierPaiement: data.dateDernierPaiement,
+        };
+      }));
     }, (error) => {
       console.error('Erreur de chargement des pénalités :', error);
       showToast('error', 'Impossible de charger les pénalités enregistrées.');
     });
 
-    return () => unsubPenalites();
+    return () => unsubscribe();
   }, []);
 
-  // Enregistrer une pénalité une seule fois à chaque seuil atteint.
   useEffect(() => {
-    if (!configLoaded || !contributionsLoaded || !caisseConfig.penaliteRetardActive || caisseConfig.montantPenalite <= 0 || membres.length === 0) return;
+    if (configLoaded && contributionsLoaded && contributionsSpecialesLoaded && membresLoaded) setIsLoading(false);
+  }, [configLoaded, contributionsLoaded, contributionsSpecialesLoaded, membresLoaded]);
 
-    const moisAttendusTotal = nombreMoisAttendus(caisseConfig.dateDebutCaisse);
+  useEffect(() => {
+    if (
+      !configLoaded ||
+      !contributionsLoaded ||
+      !contributionsSpecialesLoaded ||
+      !membresLoaded ||
+      !caisseConfig.penaliteRetardActive ||
+      caisseConfig.montantPenalite <= 0 ||
+      membres.length === 0
+    ) {
+      return;
+    }
 
+    const dateCourante = new Date();
+    const moisActuel = `${dateCourante.getFullYear()}-${String(dateCourante.getMonth() + 1).padStart(2, '0')}`;
     const enregistrerPenalites = async () => {
       try {
-        await Promise.all(membres.map(async (membre) => {
-          const moisImpayes = moisImpayesPour(
+        await Promise.all(membres.map((membre) => {
+          const unpaidMonths = genererEtatsMoisCotisation(
+            contributionsPourStatut.filter((contribution) => contribution.membreId === membre.id),
             caisseConfig.dateDebutCaisse,
-            moisAttendusTotal,
-            contributions.filter((contribution) => contribution.membreId === membre.id)
-          );
-          await assurerPenalites(
+            moisActuel,
+            caisseConfig.cotisationMensuelle,
+            caisseConfig.moisSpecial,
+            caisseConfig.cotisationMoisSpecial
+          ).filter((month) => month.statut !== 'PAYE').map((month) => month.mois);
+          return assurerPenalites(
             membre.id,
-            moisImpayes,
+            unpaidMonths,
             caisseConfig.moisRetardAvantPenalite,
             caisseConfig.montantPenalite
           );
@@ -197,34 +285,40 @@ export default function RetardsPage() {
     };
 
     void enregistrerPenalites();
-  }, [membres, contributions, caisseConfig, configLoaded, contributionsLoaded]);
+  }, [membres, contributionsPourStatut, caisseConfig, configLoaded, contributionsLoaded, contributionsSpecialesLoaded, membresLoaded]);
 
   // 4. Calculer les retards de manière réactive
   useEffect(() => {
-    if (membres.length === 0) return;
-
-    const moisAttendusTotal = nombreMoisAttendus(caisseConfig.dateDebutCaisse);
-
-    const MONTANT_MENSUEL = caisseConfig.cotisationMensuelle;
+    const dateCourante = new Date();
+    const moisActuel = `${dateCourante.getFullYear()}-${String(dateCourante.getMonth() + 1).padStart(2, '0')}`;
 
     const resultats: MembreEnRetard[] = membres
       .map((membre) => {
-        const moisImpayes = moisImpayesPour(
+        const moisImpayesStates = genererEtatsMoisCotisation(
+          contributionsPourStatut.filter((contribution) => contribution.membreId === membre.id),
           caisseConfig.dateDebutCaisse,
-          moisAttendusTotal,
-          contributions.filter((contribution) => contribution.membreId === membre.id)
-        );
-
+          moisActuel,
+          caisseConfig.cotisationMensuelle,
+          caisseConfig.moisSpecial,
+          caisseConfig.cotisationMoisSpecial
+        ).filter((month) => month.statut !== 'PAYE');
+        const moisImpayes = moisImpayesStates.map((month) => month.mois);
         const moisEnRetard = moisImpayes.length;
-        const montantCotisationDuh = moisEnRetard * MONTANT_MENSUEL;
+        const montantCotisationDuh = moisImpayesStates.reduce(
+          (total, month) => total + Math.max(0, month.montantRequis - month.montantPaye),
+          0
+        );
         const penalite = penalites
-          .filter((p) => p.membreId === membre.id)
-          .reduce((total, p) => total + soldePenalite(p), 0);
+          .filter((item) => item.membreId === membre.id)
+          .reduce((total, item) => total + soldePenalite(item), 0);
         const totalDuh = montantCotisationDuh + penalite;
 
         const moisImpayesNoms = moisImpayes.map((mois) => {
           const [year, month] = mois.split('-').map(Number);
-          return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+          return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', {
+            month: 'long',
+            year: 'numeric',
+          });
         });
 
         return {
@@ -242,7 +336,7 @@ export default function RetardsPage() {
       .filter((m) => m.moisEnRetard > 0 || m.penalite > 0);
 
     setMembresRetard(resultats);
-  }, [membres, contributions, caisseConfig, penalites]);
+  }, [membres, contributionsPourStatut, caisseConfig, penalites]);
 
   // Appeler l'API de relance automatique (Utilisation du Toast)
   const handleSendAutomaticRelance = async (membre: MembreEnRetard) => {
@@ -284,6 +378,16 @@ export default function RetardsPage() {
   const penalitesEnAttente = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
   const penalitesEnregistrees = penalites.reduce((total, penalite) => total + penalite.montantDu, 0);
 
+  const exportColumns: CsvColumn<MembreEnRetard>[] = [
+    { header: 'Membre', value: (membre) => membre.nomComplet },
+    { header: 'Téléphone', value: (membre) => membre.telephone },
+    { header: 'Mois en retard', value: (membre) => membre.moisImpayesNoms.join(', ') },
+    { header: 'Nombre de mois en retard', value: (membre) => membre.moisEnRetard },
+    { header: 'Cotisations dues (FC)', value: (membre) => membre.montantCotisationDuh },
+    { header: 'Pénalités restantes (FC)', value: (membre) => membre.penalite },
+    { header: 'Total à payer (FC)', value: (membre) => membre.totalDuh },
+  ];
+
   return (
     <div className="relative space-y-6">
       {/* Toast de notification */}
@@ -296,7 +400,7 @@ export default function RetardsPage() {
       )}
 
       {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
             Suivi des Retards & Relances Automatiques
@@ -304,18 +408,24 @@ export default function RetardsPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Calculs synchronisés depuis le lancement de la caisse au{' '}
             <strong>{caisseConfig.dateDebutCaisse}</strong> ({caisseConfig.cotisationMensuelle.toLocaleString()} FC/mois).
+            {caisseConfig.penaliteRetardActive
+              ? ` Une pénalité de ${caisseConfig.montantPenalite.toLocaleString()} FC est appliquée tous les ${caisseConfig.moisRetardAvantPenalite} mois impayés.`
+              : ' Les pénalités de retard sont désactivées.'}
           </p>
         </div>
       </div>
 
       {/* Cartes KPI redessinées (épurées et sobres) */}
+      {isLoading ? (
+        <PageSkeleton layout="cards" cards={3} />
+      ) : (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Créances à Recouvrer
             </span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <div className="shrink-0 rounded-lg bg-red-900 p-1.5 text-white ring-1 ring-rose-200 dark:ring-rose-900/50">
               <ShieldAlert size={18} />
             </div>
           </div>
@@ -329,7 +439,7 @@ export default function RetardsPage() {
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Membres en Retard
             </span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <div className="shrink-0 rounded-lg bg-red-900 p-1.5 text-white ring-1 ring-rose-200 dark:ring-rose-900/50">
               <AlertTriangle size={18} />
             </div>
           </div>
@@ -343,32 +453,42 @@ export default function RetardsPage() {
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Pénalités enregistrées
             </span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <div className="shrink-0 rounded-lg bg-red-900 p-1.5 text-white ring-1 ring-rose-200 dark:ring-rose-900/50">
               <ShieldAlert size={18} />
             </div>
           </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums truncate">
+          <p className="mt-2 text-lg font-extrabold tabular-nums sm:text-xl">
             {penalitesEnregistrees.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Solde à recouvrer : {penalitesEnAttente.toLocaleString()} FC
+            Déjà payé : {Math.max(0, penalitesEnregistrees - penalitesEnAttente).toLocaleString()} FC
+            <span className="mx-1.5">·</span>
+            Solde : {penalitesEnAttente.toLocaleString()} FC
           </p>
         </div>
       </div>
-
-      {/* Liste des membres en retard */}
+      )}
+      {/* Liste des membres en retard  */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Relances Automatiques WhatsApp API
+            Signaler un retard au membre en retard
           </h3>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Envoi sécurisé via le serveur
+            <ExportCsvButton
+              filename="rapport-retards-et-relances"
+              columns={exportColumns}
+              rows={membresRetard}
+              label="Exporter"
+              disabled={isLoading}
+            />
           </span>
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-500">Analyse des retards en cours...</div>
+          <div className="p-4 sm:p-6">
+            <PageSkeleton layout="activity-list" rows={5} />
+          </div>
         ) : membresRetard.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             Aucun membre en retard pour le moment. Tout le monde est à jour !
@@ -393,8 +513,8 @@ export default function RetardsPage() {
                       <span className="text-base font-bold text-slate-900 dark:text-white">
                         {membre.nomComplet}
                       </span>
-                      <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold dark:bg-rose-950/60 dark:text-rose-300">
-                        {membre.moisEnRetard > 0 ? `${membre.moisEnRetard} mois de retard` : 'Pénalité impayée'}
+                      <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold ">
+                        {membre.moisEnRetard} mois de retard
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
@@ -429,7 +549,7 @@ export default function RetardsPage() {
                     className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl shadow-sm transition-all ${
                       sentSuccessId === membre.id
                         ? 'bg-emerald-100 dark:bg-emerald-950/60 '
-                        : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
+                        : 'bg-blue-500 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
                     }`}
                   >
                     {sendingId === membre.id ? (

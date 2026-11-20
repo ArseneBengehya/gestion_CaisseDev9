@@ -4,14 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, CheckCircle, AlertCircle, Shield } from 'lucide-react';
 
 // Importation de notre base de données Firestore
-import {
-  collection,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc,} from 'firebase/firestore';
 import { Membre } from '@/src/types';
 import DataTable, { Column } from '@/src/components/ui/DataTable';
 import Toast from '@/src/components/ui/Toast';
@@ -21,6 +14,8 @@ import EditMembreModal from '@/src/components/modals/EditMembreModal';
 import ViewMembreModal from '@/src/components/modals/ViewMembreModal';
 import { db } from '@/src/lib/firebase';
 import { uploadMemberPhoto } from '@/src/lib/member-photo';
+import { addNotification } from '@/src/services/dbService';
+import PageSkeleton from '@/src/components/ui/PageSkeleton';
 
 export default function MembresPage() {
   const [membres, setMembres] = useState<Membre[]>([]);
@@ -82,7 +77,7 @@ export default function MembresPage() {
         setIsLoading(false);
       },
       (error) => {
-        console.error('Erreur de lecture Firestore :', error);
+        console.error('Erreur de lecture :', error);
         setIsLoading(false);
         showToast('error', 'Impossible de charger la liste des membres.');
       }
@@ -152,6 +147,12 @@ export default function MembresPage() {
       };
 
       await setDoc(membreRef, nouveauMembre);
+      await addNotification({
+        membreId: 'TOUS',
+        titre: 'Nouvelle inscription',
+        message: `${data.nomComplet} vient d'être enregistré comme membre de la caisse.`,
+        type: 'info',
+      });
 
       if (data.envoyerWhatsApp) {
         try {
@@ -334,7 +335,7 @@ export default function MembresPage() {
         </div>
         <button
           onClick={() => setIsAddOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
         >
           <UserPlus size={18} />
           Nouveau Membre
@@ -343,9 +344,7 @@ export default function MembresPage() {
 
       {/* Tableau */}
       {isLoading ? (
-        <div className="p-8 text-center text-slate-500">
-          Chargement des membres en cours...
-        </div>
+        <PageSkeleton layout="table" columns={6} rows={6} />
       ) : (
         <DataTable
           data={membres}

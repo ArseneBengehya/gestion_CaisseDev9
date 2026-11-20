@@ -57,6 +57,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   const handleConfirmLogout = () => {
     setIsLogoutOpen(false);
+    localStorage.removeItem('caisse_user');
     router.push('/login');
   };
 
