@@ -137,6 +137,15 @@ export default function ReglesEtParametresPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  const [draft, setDraft] = useState<Config>(DEFAULT_CONFIG);
+  const [newPalier, setNewPalier] = useState(EMPTY_PALIER);
+  const [error, setError] = useState({ logo: '', palier: '', form: '' });
+  const [isSaving, setIsSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isRegleOpen, setIsRegleOpen] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -177,7 +186,6 @@ export default function ReglesEtParametresPage() {
       setIsLoading(false);
       showToast('error', 'Impossible de charger les paramètres de la caisse.');
     });
-
     return () => unsub();
   }, []);
 
@@ -326,6 +334,11 @@ export default function ReglesEtParametresPage() {
       console.error('Erreur lors de la suppression :', error);
       showToast('error', 'Erreur lors de la suppression.');
     }
+    const maxRaw = newPalier.max.trim();
+    const max = maxRaw === '' ? 'Illimité' : isNaN(Number(maxRaw)) ? maxRaw : Number(maxRaw);
+    upd('paliersPrets', [...draft.paliersPrets, { id: Date.now(), min, max, delai: newPalier.delai.trim(), taux }]);
+    setNewPalier(EMPTY_PALIER);
+    setError((s) => ({ ...s, palier: '' }));
   };
 
   const handleSaveParameters = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -375,9 +388,7 @@ export default function ReglesEtParametresPage() {
   };
 
   const handleAddRegle = async (titre: string, contenu: string[]) => {
-    const nouvelleRegle: RegleItem = { id: Date.now().toString(), titre, contenu };
-    const updatedRegles = [...regles, nouvelleRegle];
-
+    const updated = [...regles, { id: Date.now().toString(), titre, contenu }];
     try {
       await setDoc(
         doc(db, 'settings', 'caisse_config'),
@@ -404,15 +415,23 @@ export default function ReglesEtParametresPage() {
     }
   };
 
+  const tabClass = (tab: string) =>
+    `flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+      activeTab === tab ? 'bg-white shadow-sm dark:bg-slate-900 text-slate-900 dark:text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+    }`;
+
+  const { paliersPrets } = config;
+
   return (
     <div className="relative space-y-6 pb-8">
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* En-tête + onglets */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Règles & Paramètres</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Configurez les paramètres globaux, les pourcentages d'emprunt et consultez les règles.
+          Configurez les paramètres globaux, les pénalités de retard et les pourcentages d'emprunt.
           </p>
         </div>
 
@@ -438,13 +457,12 @@ export default function ReglesEtParametresPage() {
         </div>
       </div>
 
+      {/* ───────── RÈGLES ───────── */}
       {activeTab === 'regles' && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 shadow-sm">
+        <div className="animate-fadeIn space-y-6">
+          <div className={`${card} flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between`}>
             <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-slate-100 p-2.5 text-slate-800 dark:bg-slate-800 dark:text-slate-200 shadow-sm">
-                <FileText size={20} />
-              </div>
+              <div className="rounded-xl bg-slate-100 p-2.5 text-slate-800 dark:bg-slate-800 dark:text-slate-200"><FileText size={20} /></div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Charte Officielle - Caisse Dev9</h3>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Consultez ou ajoutez les règles régissant le groupe.</p>
@@ -470,16 +488,14 @@ export default function ReglesEtParametresPage() {
           {isLoading ? (
             <PageSkeleton layout="activity-list" rows={3} />
           ) : regles.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-              Aucune règle enregistrée. Cliquez sur "Ajouter une règle" pour en créer une.
-            </div>
+            <div className={`${card} p-12 text-center text-slate-400`}>Aucune règle enregistrée. Cliquez sur "Ajouter une règle" pour en créer une.</div>
           ) : (
-            regles.map((regle) => (
-              <div key={regle.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <h4 className="text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">{regle.titre}</h4>
+            regles.map((r) => (
+              <div key={r.id} className={`${card} p-6`}>
+                <h4 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-900 dark:text-white">{r.titre}</h4>
                 <div className="flex flex-col gap-3">
-                  {regle.contenu.map((ligne, idx) => (
-                    <p key={idx} className="text-sm text-slate-700 dark:text-slate-300">{idx + 1}. {ligne}</p>
+                  {r.contenu.map((ligne, i) => (
+                    <p key={i} className="text-sm text-slate-700 dark:text-slate-300">{i + 1}. {ligne}</p>
                   ))}
                 </div>
               </div>
@@ -488,8 +504,9 @@ export default function ReglesEtParametresPage() {
         </div>
       )}
 
-      <AddRegleModal isOpen={isRegleModalOpen} onClose={() => setIsRegleModalOpen(false)} onAdd={handleAddRegle} />
+      <AddRegleModal isOpen={isRegleOpen} onClose={() => setIsRegleOpen(false)} onAdd={handleAddRegle} />
 
+      {/* ───────── PARAMÈTRES (affichage) ───────── */}
       {activeTab === 'parametres' && (
         <div className="animate-fadeIn overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
@@ -626,7 +643,7 @@ export default function ReglesEtParametresPage() {
                     >
                       <Plus size={15} /> Configurer les pourcentages
                     </button>
-                  </div>
+                  )}
                 </div>
               </section>
             </div>

@@ -72,10 +72,16 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
     <Modal isOpen={isOpen} onClose={onClose} title="Modifier les informations du membre" maxWidth="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800/60">
-          <div className="rounded-xl bg-white p-2.5 text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-200"><UserRound size={20} /></div>
+          <div className="rounded-xl bg-white p-2.5 text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-200">
+              {photoPreview ? (
+                <img src={photoPreview}  className="h-9 w-9 rounded-full object-cover" />
+              ) : (
+                <UserRound  />
+              )}
+          </div>
           <div>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Modifier un membre</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Les informations et la photo sont synchronisées avec Firestore.</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{membre?.nomComplet}</p>
+            {/* <p className="text-xs text-slate-500 dark:text-slate-400">Les informations et la photo sont synchronisées avec Firestore.</p> */}
           </div>
         </div>
 

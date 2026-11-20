@@ -9,14 +9,16 @@ interface ViewHistoriqueModalProps {
   isOpen: boolean;
   onClose: () => void;
   data: StatutMembreContribution | null;
+  montantMensuel?: number;
 }
 
 export default function ViewHistoriqueModal({
   isOpen,
   onClose,
   data,
+  montantMensuel = 5000,
 }: ViewHistoriqueModalProps) {
-  const [isFullScreen, setIsFullScreen] = useState(true); // Par défaut en plein écran comme demandé
+  const [isFullScreen, setIsFullScreen] = useState(true);
 
   if (!data) return null;
   const historyRows = [...(data.historiquePaiements || [])]

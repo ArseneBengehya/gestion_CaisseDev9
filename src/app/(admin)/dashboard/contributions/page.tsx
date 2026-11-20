@@ -31,6 +31,7 @@ import {
   onSnapshot,
   addDoc,
   doc,
+  runTransaction,
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
@@ -46,6 +47,8 @@ interface ContributionDoc extends ContributionMonthRecord {
   id: string;
   membreId: string;
   nombreMois: number;
+  moisSelectionnes?: string[]; // Ex: ["2025-01", "2025-02"] (absent sur les anciennes contributions)
+  moisCouverts?: string[];
   montantVerse: number;
   modePaiement: string;
   note: string;
@@ -65,6 +68,50 @@ interface ContributionSpecialDoc {
   datePaiement: string;
 }
 
+const MOIS_FR = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
+const makeKey = (year: number, monthIndex: number) =>
+  `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+
+// "2025-01" -> "Janvier 2025"
+const labelFromKey = (key: string) => {
+  const [y, m] = key.split('-').map(Number);
+  return `${MOIS_FR[m - 1]} ${y}`;
+};
+
+// Liste des clés de mois entre deux clés incluses (ex: "2025-01" -> "2025-04")
+const rangeKeys = (startKey: string, endKey: string) => {
+  const result: string[] = [];
+  let [y, m] = startKey.split('-').map(Number);
+  m -= 1;
+  let guard = 0;
+  while (makeKey(y, m) <= endKey && guard < 1200) {
+    result.push(makeKey(y, m));
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+    guard++;
+  }
+  return result;
+};
+
+// Mois suivant une clé
+const nextKey = (key: string) => {
+  let [y, m] = key.split('-').map(Number);
+  m -= 1;
+  m++;
+  if (m > 11) {
+    m = 0;
+    y++;
+  }
+  return makeKey(y, m);
+};
+
 export default function ContributionsPage() {
   const [activeTab, setActiveTab] = useState<ContributionTab>('cotisations');
   const [membres, setMembres] = useState<Membre[]>([]);
@@ -73,7 +120,11 @@ export default function ContributionsPage() {
   const [penalites, setPenalites] = useState<Penalite[]>([]);
   const [paiementsPenalites, setPaiementsPenalites] = useState<PaiementPenalite[]>([]);
   const [contributionsData, setContributionsData] = useState<StatutMembreContribution[]>([]);
-  
+  const [moisPayesParMembre, setMoisPayesParMembre] = useState<Record<string, string[]>>({});
+  const [penalites, setPenalites] = useState<PenaliteData[]>([]);
+  const [montantsPaiement, setMontantsPaiement] = useState<Record<string, string>>({});
+  const [paiementEnCours, setPaiementEnCours] = useState<string | null>(null);
+
   // Paramètres globaux de la caisse (récupérés depuis Firestore)
   const [caisseConfig, setCaisseConfig] = useState({
     dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT,
@@ -81,6 +132,8 @@ export default function ContributionsPage() {
     cotisationMoisSpecial: 10000,
     moisSpecial: '',
   });
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const dernierMontantPenaliteSynchro = useRef<number | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSpecialLoading, setIsSpecialLoading] = useState(true);
@@ -110,6 +163,8 @@ export default function ContributionsPage() {
     const unsubConfig = onSnapshot(doc(db, 'settings', 'caisse_config'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        const cotisationMensuelle = Number(data.cotisationMensuelle ?? 5000);
+        const cotisationMoisSpecial = Number(data.cotisationMoisSpecial ?? 10000);
         setCaisseConfig({
           dateDebutCaisse: data.dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT,
           cotisationMensuelle: data.cotisationMensuelle || 5000,
@@ -117,6 +172,10 @@ export default function ContributionsPage() {
           moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : ''),
         });
       }
+      setConfigLoaded(true);
+    }, (error) => {
+      console.error('Erreur de chargement des paramètres de cotisation :', error);
+      showToast('error', 'Impossible de charger les paramètres de la caisse.');
     });
 
     return () => unsubConfig();
@@ -164,6 +223,9 @@ export default function ContributionsPage() {
 
       setRawContributions(contribs);
       setIsLoading(false);
+    }, (error) => {
+      console.error('Erreur de chargement des contributions :', error);
+      showToast('error', 'Impossible de charger les contributions.');
     });
 
     return () => unsubContributions();
@@ -264,12 +326,13 @@ export default function ContributionsPage() {
     const moisActuel = `${dateCourante.getFullYear()}-${String(dateCourante.getMonth() + 1).padStart(2, '0')}`;
     const montantMensuel = caisseConfig.cotisationMensuelle;
 
+    const paidMap: Record<string, string[]> = {};
+
     const computed: StatutMembreContribution[] = membres.map((membre) => {
       const memberContribs = contributionsAvecMoisSpecial.filter(
         (contribution) => contribution.membreId === membre.id
       );
 
-      // Cumul du montant versé
       const montantTotalCotise = memberContribs.reduce((sum, c) => sum + (c.montantVerse || 0), 0);
       
       const monthStates = genererEtatsMoisCotisation(
@@ -350,6 +413,7 @@ export default function ContributionsPage() {
       };
     });
 
+    setMoisPayesParMembre(paidMap);
     setContributionsData(computed);
   }, [membres, contributionsAvecMoisSpecial, caisseConfig]);
 
@@ -485,6 +549,55 @@ export default function ContributionsPage() {
       showToast('error', error instanceof Error ? error.message : 'Impossible d’enregistrer le paiement de pénalité.');
     } finally {
       setIsSavingPenalitePayment(false);
+    }
+  };
+
+  const handlePaiementPenalite = async (penalite: PenaliteData) => {
+    const montant = Number(montantsPaiement[penalite.id]);
+    if (!Number.isFinite(montant) || montant <= 0) {
+      showToast('error', 'Saisissez un montant de paiement supérieur à zéro.');
+      return;
+    }
+
+    setPaiementEnCours(penalite.id);
+    try {
+      const penaliteRef = doc(db, 'penalites', penalite.id);
+      const paiementRef = doc(collection(db, 'paiements_penalites'));
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(penaliteRef);
+        if (!snapshot.exists()) throw new Error('Cette pénalité n’existe plus.');
+
+        const data = snapshot.data();
+        const montantDu = Number(data.montantDu) || 0;
+        const montantDejaPaye = Number(data.montantPaye) || 0;
+        const solde = Math.max(0, montantDu - montantDejaPaye);
+        if (montant > solde) {
+          throw new Error(`Le montant dépasse le solde de ${solde.toLocaleString()} FC.`);
+        }
+
+        const nouveauMontantPaye = montantDejaPaye + montant;
+        transaction.update(penaliteRef, {
+          montantPaye: nouveauMontantPaye,
+          statut: nouveauMontantPaye >= montantDu ? 'PAYEE' : 'PARTIELLE',
+          dateDernierPaiement: new Date().toISOString(),
+        });
+        transaction.set(paiementRef, {
+          penaliteId: penalite.id,
+          membreId: data.membreId || penalite.membreId,
+          montant,
+          datePaiement: new Date().toISOString(),
+          moisDeclenchement: Number(data.moisDeclenchement) || penalite.moisDeclenchement,
+          moisDeclenchementKey: data.moisDeclenchementKey || penalite.moisDeclenchementKey,
+        });
+      });
+
+      setMontantsPaiement((values) => ({ ...values, [penalite.id]: '' }));
+      showToast('success', 'Paiement de pénalité enregistré.');
+    } catch (error) {
+      console.error('Erreur lors de l’enregistrement du paiement de pénalité :', error);
+      showToast('error', error instanceof Error ? error.message : 'Impossible d’enregistrer ce paiement.');
+    } finally {
+      setPaiementEnCours(null);
     }
   };
 
@@ -808,6 +921,93 @@ export default function ContributionsPage() {
           onExport={(rows) => exportCsv('rapport-penalites', penalitesExportColumns, buildPenalitesExportRows(rows))}
         />
       )}
+      </>
+      )}
+
+      {activeTab === 'penalites' && (
+      <>
+      <div className="group relative max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pénalités restantes à payer</span>
+          <div className="rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <Coins size={18} />
+          </div>
+        </div>
+        <p className="mt-2 text-xl font-extrabold tabular-nums">
+          {totalPenalites.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
+        </p>
+      </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-800 sm:px-6">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Suivi et paiement des pénalités</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Chaque pénalité est enregistrée après le seuil de mois impayés configuré. Les paiements partiels sont acceptés.
+          </p>
+        </div>
+        {penalites.length === 0 ? (
+          <p className="p-6 text-center text-sm text-slate-500">Aucune pénalité enregistrée pour le moment.</p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {penalites
+              .slice()
+              .sort((a, b) => a.membreId.localeCompare(b.membreId) || a.moisDeclenchementKey.localeCompare(b.moisDeclenchementKey))
+              .map((penalite) => {
+                const membre = membres.find((item) => item.id === penalite.membreId);
+                const solde = soldePenalite(penalite);
+                const payee = solde === 0;
+                return (
+                  <div key={penalite.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {membre?.nomComplet || (membre ? `${membre.prenom} ${membre.nom}` : 'Membre')}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Seuil atteint après {penalite.moisDeclenchement} mois impayés ({penalite.moisDeclenchementKey}) · Pénalité : {penalite.montantDu.toLocaleString()} FC · Payé : {penalite.montantPaye.toLocaleString()} FC
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:min-w-64 sm:flex-row sm:items-center">
+                      {payee ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                          <CheckCircle size={16} /> Payée
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-sm font-bold text-rose-600 dark:text-rose-400">
+                            Solde : {solde.toLocaleString()} FC
+                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            max={solde}
+                            step="1"
+                            aria-label={`Montant payé pour la pénalité de ${membre?.nomComplet || 'ce membre'}`}
+                            placeholder="Montant reçu"
+                            value={montantsPaiement[penalite.id] || ''}
+                            onChange={(event) => setMontantsPaiement((values) => ({
+                              ...values,
+                              [penalite.id]: event.target.value,
+                            }))}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white sm:w-32"
+                          />
+                          <button
+                            type="button"
+                            disabled={paiementEnCours === penalite.id}
+                            onClick={() => void handlePaiementPenalite(penalite)}
+                            className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                          >
+                            {paiementEnCours === penalite.id ? 'Enregistrement...' : 'Enregistrer'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+      </section>
+      </>
+      )}
 
       <AddContributionDrawer
         isOpen={isDrawerOpen}
@@ -834,6 +1034,7 @@ export default function ContributionsPage() {
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
         data={selectedContribution}
+        montantMensuel={caisseConfig.cotisationMensuelle}
       />
     </div>
   );
