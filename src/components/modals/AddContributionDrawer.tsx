@@ -1,36 +1,48 @@
 'use client';
 
-import { Membre } from '@/src/types';
-import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar as CalendarIcon, User, Check, CheckCircle2 } from 'lucide-react';
-import Drawer from '../ui/Drawer';
+import React, { useMemo, useState } from 'react';
+import { CalendarDays, CheckCircle2, User } from 'lucide-react';
+import type { AllocationCotisation, Membre } from '@/src/types';
 import {
-  ContributionMonthRecord,
-  DATE_DEBUT_CAISSE_PAR_DEFAUT,
-  obtenirMoisCouvertsParContributions,
-} from '@/src/lib/contribution-months';
+  genererEtatsMoisCotisation,
+  normaliserMoisSpecial,
+  repartirPaiementNormal,
+  repartirPaiementSpecial,
+  type ContributionPaymentRecord,
+} from '@/src/lib/contribution-payments';
+import { DATE_DEBUT_CAISSE_PAR_DEFAUT } from '@/src/lib/contribution-months';
 import Modal from '../ui/Modal';
 
 interface AddContributionDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   membres: Membre[];
-  contributions: ContributionMonthRecord[];
+  contributions: (ContributionPaymentRecord & { membreId?: string })[];
   montantMensuelDefaut?: number;
   montantMoisSpecial?: number;
   moisSpecialConfigure?: string;
   typeContribution?: 'standard' | 'mois-special';
-  dateDebutCaisse?: string; // Ex: "2024-08-09"
-  onSubmit: (data: { 
-    membreId: string; 
-    nombreMois: number; 
-    moisSelectionnes: string[]; 
-    modePaiement: string; 
+  dateDebutCaisse?: string;
+  onSubmit: (data: {
+    membreId: string;
+    nombreMois: number;
+    moisSelectionnes: string[];
+    montantVerse: number;
+    repartition: AllocationCotisation[];
+    modePaiement: string;
     note: string;
     typeContribution?: 'standard' | 'mois-special';
     moisSpecial?: string;
   }) => void;
 }
+
+const monthKeyFor = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+const formatMonth = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+};
 
 export default function AddContributionDrawer({
   isOpen,
@@ -45,259 +57,229 @@ export default function AddContributionDrawer({
   onSubmit,
 }: AddContributionDrawerProps) {
   const [membreId, setMembreId] = useState('');
-  
-  // Extraction propre de l'année et du mois (ex: "2024-08-09" -> "2024-08")
-  const formatMoisAnnee = (dateStr: string) => {
-    if (!dateStr) return '2025-01';
-    return dateStr.substring(0, 7);
-  };
-
-  const minMoisCaisse = formatMoisAnnee(dateDebutCaisse);
-
-  const [moisDebut, setMoisDebut] = useState(minMoisCaisse);
-  const [nombreMois, setNombreMois] = useState(1);
+  const [montantSaisi, setMontantSaisi] = useState('');
+  const [moisSpecialChoisi, setMoisSpecialChoisi] = useState('');
   const [modePaiement, setModePaiement] = useState('CASH');
-  const [note, setNote] = useState('');
 
-  const moisDejaPayes = useMemo(() => {
-    const contributionsMembre = contributions.filter((contribution) => contribution.membreId === membreId);
-    return new Set(obtenirMoisCouvertsParContributions(contributionsMembre, dateDebutCaisse).flat());
-  }, [contributions, dateDebutCaisse, membreId]);
-  const moisSpecialDejaPaye = !!moisSpecialConfigure && moisDejaPayes.has(moisSpecialConfigure);
+  const futureMonths = typeContribution === 'mois-special'
+    ? 120
+    : Math.ceil((Math.max(0, Number(montantSaisi)) / Math.max(1, montantMensuelDefaut)) * 12 / 11) + 12;
+  const monthStates = useMemo(() => {
+    const memberContributions = contributions.filter((contribution) => contribution.membreId === membreId);
+    const forecastEnd = new Date();
+    forecastEnd.setMonth(forecastEnd.getMonth() + futureMonths);
+    return genererEtatsMoisCotisation(
+      memberContributions,
+      dateDebutCaisse,
+      monthKeyFor(forecastEnd),
+      montantMensuelDefaut,
+      normaliserMoisSpecial(moisSpecialConfigure),
+      montantMoisSpecial
+    );
+  }, [contributions, dateDebutCaisse, futureMonths, membreId, montantMensuelDefaut, montantMoisSpecial, moisSpecialConfigure]);
 
-  const premierMoisImpayé = useMemo(() => {
-    let mois = minMoisCaisse;
-    while (moisDejaPayes.has(mois)) {
-      const [annee, numeroMois] = mois.split('-').map(Number);
-      const date = new Date(annee, numeroMois, 1);
-      mois = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    }
-    return mois;
-  }, [minMoisCaisse, moisDejaPayes]);
+  const preview = useMemo(
+    () => repartirPaiementNormal(Number(montantSaisi), monthStates),
+    [montantSaisi, monthStates]
+  );
+  const availableSpecialMonths = monthStates.filter((month) =>
+    month.type === 'SPECIALE' && month.statut !== 'PAYE'
+  );
+  const selectedSpecialMonth = availableSpecialMonths.find((month) => month.mois === moisSpecialChoisi)
+    ?? availableSpecialMonths[0];
+  const specialAllocation = selectedSpecialMonth
+    ? repartirPaiementSpecial(Number(montantSaisi), selectedSpecialMonth)
+    : null;
+  const specialRemaining = selectedSpecialMonth
+    ? Math.max(0, selectedSpecialMonth.montantRequis - selectedSpecialMonth.montantPaye)
+    : 0;
 
-  useEffect(() => {
-    if (!isOpen) return;
-    setMoisDebut(premierMoisImpayé);
-  }, [isOpen, premierMoisImpayé, typeContribution]);
-
-  // Génération des mois payés
-  const genererMoisCouverts = () => {
-    if (!moisDebut) return [];
-    const [yearStr, monthStr] = moisDebut.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10) - 1;
-
-    const result: string[] = [];
-    let index = 0;
-    while (result.length < nombreMois) {
-      const date = new Date(year, month + index, 1);
-      const mStr = String(date.getMonth() + 1).padStart(2, '0');
-      const yStr = date.getFullYear();
-      const key = `${yStr}-${mStr}`;
-      if (!moisDejaPayes.has(key)) result.push(key);
-      index++;
-    }
-    return result;
+  const handleClose = () => {
+    setMembreId('');
+    setMontantSaisi('');
+    setMoisSpecialChoisi('');
+    setModePaiement('CASH');
+    onClose();
   };
 
-  const formaterMois = (mois: string) => {
-    const [year, month] = mois.split('-').map(Number);
-    return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-  };
-
-  const moisCouverts = genererMoisCouverts();
-  const montantTotal = typeContribution === 'mois-special'
-    ? montantMoisSpecial
-    : nombreMois * montantMensuelDefaut;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const amount = Number(montantSaisi);
     if (!membreId) {
       alert('Veuillez sélectionner un membre.');
       return;
     }
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      alert('Saisissez un montant entier supérieur à zéro.');
+      return;
+    }
 
     if (typeContribution === 'mois-special') {
-      if (!moisSpecialConfigure) {
-        alert('Veuillez d’abord configurer le mois spécial dans les paramètres.');
+      if (!selectedSpecialMonth || !specialAllocation) {
+        alert('Aucun mois spécial impayé n’est disponible pour ce membre.');
         return;
       }
-      if (moisSpecialDejaPaye) {
-        alert('Ce membre a déjà payé le mois configuré comme mois spécial.');
+      if (amount > specialRemaining) {
+        alert(`Le montant dépasse le solde de ce mois spécial (${specialRemaining.toLocaleString('fr-FR')} FC).`);
         return;
       }
-
       onSubmit({
         membreId,
         nombreMois: 0,
         moisSelectionnes: [],
+        montantVerse: amount,
+        repartition: [specialAllocation],
         modePaiement,
-        note,
+        note: '',
         typeContribution,
-        moisSpecial: moisSpecialConfigure,
+        moisSpecial: selectedSpecialMonth.mois,
       });
-
-      setMembreId('');
-      setModePaiement('CASH');
-      setNote('');
-      onClose();
-      return;
+    } else {
+      if (preview.allocations.length === 0 || preview.montantRestant > 0) {
+        alert('Aucun mois normal disponible pour affecter la totalité de ce montant.');
+        return;
+      }
+      onSubmit({
+        membreId,
+        nombreMois: preview.moisSoldes.length,
+        moisSelectionnes: preview.moisSoldes,
+        montantVerse: amount,
+        repartition: preview.allocations,
+        modePaiement,
+        note: '',
+      });
     }
-
-    if (moisDebut < minMoisCaisse) {
-      alert(`Impossible de choisir un mois antérieur au lancement de la caisse (${minMoisCaisse}).`);
-      return;
-    }
-
-    onSubmit({
-      membreId,
-      nombreMois,
-      moisSelectionnes: moisCouverts,
-      modePaiement,
-      note,
-    });
 
     setMembreId('');
-    setNombreMois(1);
+    setMontantSaisi('');
     setModePaiement('CASH');
-    setNote('');
     onClose();
   };
+
+  const allocations = typeContribution === 'mois-special'
+    ? specialAllocation ? [specialAllocation] : []
+    : preview.allocations;
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={typeContribution === 'mois-special' ? 'Enregistrer un Mois spécial' : 'Enregistrer une Contribution'}
     >
       <form onSubmit={handleSubmit} className="space-y-5 p-1">
-        {/* Sélection du Membre */}
         <div>
           <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-            <User size={14} className="text-blue-500" />
-            Sélectionner le Membre
+            <User size={14} className="" />
+            Sélectionner le membre
           </label>
           <select
             value={membreId}
-            onChange={(e) => setMembreId(e.target.value)}
+            onChange={(event) => setMembreId(event.target.value)}
             required
-            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           >
             <option value="">-- Choisir un membre --</option>
-            {membres.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nomComplet || `${m.prenom} ${m.nom}`}
+            {membres.map((membre) => (
+              <option key={membre.id} value={membre.id}>
+                {membre.nomComplet || `${membre.prenom} ${membre.nom}`}
               </option>
             ))}
           </select>
         </div>
 
-        {typeContribution === 'mois-special' ? (
+        {typeContribution === 'mois-special' && (
           <div>
             <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              <CalendarIcon size={14} className="text-blue-500" />
-              Mois spécial concerné
+              <CalendarDays size={14} className="" />
+              Année du mois spécial
             </label>
-            <input
-              type="month"
-              value={moisSpecialConfigure}
-              readOnly
+            <select
+              value={selectedSpecialMonth?.mois || ''}
+              onChange={(event) => setMoisSpecialChoisi(event.target.value)}
               required
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-            />
-            {!moisSpecialConfigure ? (
-              <p className="mt-1 text-xs text-rose-600">Configurez d’abord le mois spécial dans les paramètres de la caisse.</p>
-            ) : moisSpecialDejaPaye ? (
-              <p className="mt-1 text-xs text-amber-700">Ce membre a déjà payé ce mois.</p>
-            ) : (
-              <p className="mt-1 text-xs text-slate-500">Le mois spécial est défini dans les paramètres de la caisse.</p>
-            )}
+              disabled={availableSpecialMonths.length === 0}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              {availableSpecialMonths.length === 0 ? (
+                <option value="">Aucun mois spécial impayé</option>
+              ) : availableSpecialMonths.map((month) => (
+                <option key={month.mois} value={month.mois}>{formatMonth(month.mois)}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Montant requis : {montantMoisSpecial.toLocaleString('fr-FR')} FC. Les versements partiels sont acceptés.
+            </p>
           </div>
-        ) : (
-          <>
-            {/* Choix du Mois de début & Nombre de mois */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  <CalendarIcon size={14} className="text-blue-500" />
-                  À partir du mois de :
-                </label>
-                <input
-                  type="month"
-                  value={moisDebut}
-                  min={minMoisCaisse}
-                  onChange={(e) => setMoisDebut(e.target.value)}
-                  required
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Début de la caisse : <span className="font-semibold text-blue-600 dark:text-blue-400">{minMoisCaisse}</span>
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  Nombre de mois
-                </label>
-                <input
-                  type="number"
-                  placeholder="Entrer le nombre de mois"
-                  min="1"
-                  value={nombreMois}
-                  onChange={(e) => setNombreMois(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                />
-              </div>
-            </div>
-
-            {/* Aperçu sous forme de Badges des mois couverts */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Mois qui seront marqués comme PAYÉS :
-              </label>
-              <div className="flex max-h-24 flex-wrap gap-2 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-900/50">
-                {moisCouverts.map((mois, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800 dark:border-blue-800/50 dark:bg-blue-950/80 dark:text-blue-300"
-                  >
-                    <Check size={12} className="text-blue-600 dark:text-blue-400" />
-                    {formaterMois(mois)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </>
         )}
 
-        {/* Affichage automatique du montant calculé */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-              {typeContribution === 'mois-special' ? 'Montant du mois spécial :' : 'Montant total à verser :'}
-            </span>
-            <span className="text-base font-extrabold text-emerald-700 dark:text-emerald-300">
-              {montantTotal.toLocaleString()} FC
-            </span>
-          </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Montant à payer (FC)
+          </label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            required
+            value={montantSaisi}
+            onChange={(event) => setMontantSaisi(event.target.value)}
+            placeholder="Ex. 35 000"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2  dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          />
         </div>
 
-        {/* Boutons d'action */}
+        <div className="rounded-xl flex flex-col gap-1 border border-slate-200 bg-slate-50 px-4 py-3 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          {typeContribution === 'mois-special' ? (
+            <p className="text-sm ">
+              Solde après ce versement : {Math.max(0, specialRemaining - (specialAllocation?.montantVerse || 0)).toLocaleString('fr-FR')} FC
+            </p>
+          ) : (
+            <>
+              <p className="text-sm font-semibold ">
+                {preview.moisSoldes.length} mois soldé{preview.moisSoldes.length > 1 ? 's' : ''}
+                {preview.moisEnCours ? ` · avance de ${preview.montantAvance.toLocaleString('fr-FR')} FC sur ${formatMonth(preview.moisEnCours)}` : ''}
+              </p>
+              {preview.montantRestant > 0 && (
+                <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                  <span>Montant non affecté :</span>
+                  <span className="font-medium tabular-nums">
+                    {preview.montantRestant.toLocaleString('fr-FR')} FC
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+          {allocations.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs ">
+              {allocations.map((allocation) => (
+                <li key={allocation.mois}>
+                  {formatMonth(allocation.mois)} : {allocation.montantVerse.toLocaleString('fr-FR')} FC
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Mode de paiement</label>
+          <select value={modePaiement} onChange={(event) => setModePaiement(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+            <option value="CASH">Cash</option>
+            {/* <option value="MOBILE_MONEY">Mobile Money</option>
+            <option value="VIREMENT">Virement</option> */}
+          </select>
+        </div>
+
         <div className="flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
+          <button type="button" onClick={handleClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-300">
             Annuler
           </button>
           <button
             type="submit"
-            disabled={typeContribution === 'mois-special' && (!moisSpecialConfigure || moisSpecialDejaPaye)}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            disabled={!membreId || !Number(montantSaisi) || (typeContribution === 'mois-special' && (!selectedSpecialMonth || !specialAllocation))}
+            className="inline-flex items-center gap-2 rounded-xl  px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
           >
             <CheckCircle2 size={16} />
-            {typeContribution === 'mois-special' ? 'Valider le mois spécial' : 'Valider le versement'}
+            Valider le versement
           </button>
         </div>
       </form>

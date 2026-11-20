@@ -16,6 +16,8 @@ interface PenaltiesSectionProps {
   soldeTotal: number;
   nombrePaiements: number;
   isLoading: boolean;
+  onExport?: (rows: readonly PenaliteAvecMembre[]) => void;
+  exportLabel?: string;
 }
 
 export default function PenaltiesSection({
@@ -25,6 +27,8 @@ export default function PenaltiesSection({
   soldeTotal,
   nombrePaiements,
   isLoading,
+  onExport,
+  exportLabel,
 }: PenaltiesSectionProps) {
   const columns: Column<PenaliteAvecMembre>[] = [
     { header: 'Membre', accessor: 'nomMembre' },
@@ -43,13 +47,13 @@ export default function PenaltiesSection({
     },
     {
       header: 'Montant payé',
-      accessor: (item) => <span className="font-semibold text-emerald-700 dark:text-emerald-400">{item.montantPaye.toLocaleString('fr-FR')} FC</span>,
+      accessor: (item) => <span className="font-semibold ">{item.montantPaye.toLocaleString('fr-FR')} FC</span>,
     },
     {
       header: 'Solde',
       accessor: (item) => {
         const solde = soldePenalite(item);
-        return <span className={`font-semibold ${solde > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>{solde.toLocaleString('fr-FR')} FC</span>;
+        return <span className={`font-semibold ${solde > 0}`}>{solde.toLocaleString('fr-FR')} FC</span>;
       },
     },
     {
@@ -79,7 +83,7 @@ export default function PenaltiesSection({
         <PageSkeleton layout="cards-table" cards={4} columns={7} rows={5} />
       ) : (
         <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pénalités enregistrées</span>
@@ -92,14 +96,14 @@ export default function PenaltiesSection({
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pénalités payées</span>
             <div className="shrink-0 rounded-lg bg-emerald-50 p-2 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><CheckCircle size={18} /></div>
           </div>
-          <p className="mt-2 truncate text-lg font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400 sm:text-xl">{totalPaye.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
+          <p className="mt-2 truncate text-lg font-extrabold tabular-nums  sm:text-xl">{totalPaye.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
         </div>
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Solde à recouvrer</span>
             <div className="shrink-0 rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"><AlertCircle size={18} /></div>
           </div>
-          <p className="mt-2 truncate text-lg font-extrabold tabular-nums text-rose-700 dark:text-rose-400 sm:text-xl">{soldeTotal.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
+          <p className="mt-2 truncate text-lg font-extrabold tabular-nums sm:text-xl">{soldeTotal.toLocaleString('fr-FR')} <span className="text-xs font-normal text-slate-500">FC</span></p>
         </div>
         <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
@@ -119,6 +123,9 @@ export default function PenaltiesSection({
           columns={columns}
           searchKey="nomMembre"
           searchPlaceholder="Rechercher un membre..."
+          exportFilename="rapport-penalites"
+          exportLabel={exportLabel}
+          onExport={onExport}
         />
       )}
         </>

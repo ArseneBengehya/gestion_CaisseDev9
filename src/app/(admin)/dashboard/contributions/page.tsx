@@ -1,23 +1,21 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { PiggyBank, PlusCircle, AlertCircle, CheckCircle, CalendarDays, Wallet, ShieldAlert, HandCoins } from 'lucide-react';
-import { Membre, StatutMembreContribution } from '@/src/types';
-import DataTable, { Column } from '@/src/components/ui/DataTable';
+import { PlusCircle, HandCoins } from 'lucide-react';
+import type { Membre, StatutMembreContribution } from '@/src/types';
+import type { Column } from '@/src/components/ui/DataTable';
 import AddContributionDrawer from '@/src/components/modals/AddContributionDrawer';
-import PayPenaliteModal, { MembrePenalite } from '@/src/components/modals/PayPenaliteModal';
+import PayPenaliteModal, { type MembrePenalite } from '@/src/components/modals/PayPenaliteModal';
 import ViewHistoriqueModal from '@/src/components/modals/ViewHistoriqueModal';
 import Toast from '@/src/components/ui/Toast';
-import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
-import SpecialMonthSection, { ContributionSpeciale } from '@/src/components/contributions/SpecialMonthSection';
-import PenaltiesSection, { PenaliteAvecMembre } from '@/src/components/contributions/PenaltiesSection';
-import PageSkeleton from '@/src/components/ui/PageSkeleton';
+import SpecialMonthSection, { type ContributionSpeciale } from '@/src/components/contributions/SpecialMonthSection';
+import PenaltiesSection, { type PenaliteAvecMembre } from '@/src/components/contributions/PenaltiesSection';
+import ContributionTabs, { type ContributionTab } from '@/src/components/contributions/ContributionTabs';
+import ContributionsMembersSection, { type ContributionMemberRow } from '@/src/components/contributions/ContributionsMembersSection';
 import {
   ContributionMonthRecord,
   DATE_DEBUT_CAISSE_PAR_DEFAUT,
-  moisImpayesPour,
   normaliserDateFirestore,
-  nombreMoisAttendus,
   obtenirMoisCouvertsParContributions,
 } from '@/src/lib/contribution-months';
 import {
@@ -36,7 +34,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
-import type { CsvColumn } from '@/src/lib/export-csv';
+import { exportCsv, type CsvColumn } from '@/src/lib/export-csv';
+import type { AllocationCotisation } from '@/src/types';
+import {
+  genererEtatsMoisCotisation,
+  normaliserMoisSpecial,
+  statutMoisCotisation,
+} from '@/src/lib/contribution-payments';
 
 interface ContributionDoc extends ContributionMonthRecord {
   id: string;
@@ -48,6 +52,7 @@ interface ContributionDoc extends ContributionMonthRecord {
   datePaiement: string;
   typeContribution?: string;
   moisSpecial?: string;
+  repartition?: AllocationCotisation[];
 }
 
 interface ContributionSpecialDoc {
@@ -61,7 +66,7 @@ interface ContributionSpecialDoc {
 }
 
 export default function ContributionsPage() {
-  const [activeTab, setActiveTab] = useState<'cotisations' | 'mois-special' | 'penalites'>('cotisations');
+  const [activeTab, setActiveTab] = useState<ContributionTab>('cotisations');
   const [membres, setMembres] = useState<Membre[]>([]);
   const [rawContributions, setRawContributions] = useState<ContributionDoc[]>([]);
   const [rawContributionsSpeciales, setRawContributionsSpeciales] = useState<ContributionSpecialDoc[]>([]);
@@ -109,7 +114,7 @@ export default function ContributionsPage() {
           dateDebutCaisse: data.dateDebutCaisse || DATE_DEBUT_CAISSE_PAR_DEFAUT,
           cotisationMensuelle: data.cotisationMensuelle || 5000,
           cotisationMoisSpecial: data.cotisationMoisSpecial || 10000,
-          moisSpecial: typeof data.moisSpecial === 'string' ? data.moisSpecial : '',
+          moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : ''),
         });
       }
     });
@@ -256,7 +261,6 @@ export default function ContributionsPage() {
     if (membres.length === 0) return;
 
     const dateCourante = new Date();
-    const moisAttendus = nombreMoisAttendus(caisseConfig.dateDebutCaisse, dateCourante);
     const moisActuel = `${dateCourante.getFullYear()}-${String(dateCourante.getMonth() + 1).padStart(2, '0')}`;
     const montantMensuel = caisseConfig.cotisationMensuelle;
 
@@ -268,8 +272,17 @@ export default function ContributionsPage() {
       // Cumul du montant versé
       const montantTotalCotise = memberContribs.reduce((sum, c) => sum + (c.montantVerse || 0), 0);
       
+      const monthStates = genererEtatsMoisCotisation(
+        memberContribs,
+        caisseConfig.dateDebutCaisse,
+        moisActuel,
+        montantMensuel,
+        caisseConfig.moisSpecial,
+        caisseConfig.cotisationMoisSpecial,
+        120
+      );
       const moisParContribution = obtenirMoisCouvertsParContributions(memberContribs, caisseConfig.dateDebutCaisse);
-      const moisCouverts = new Set(moisParContribution.flat());
+      const moisCouverts = new Set(monthStates.filter((month) => month.statut === 'PAYE').map((month) => month.mois));
       const moisPayes = Array.from(moisCouverts)
         .sort()
         .map((mois) => {
@@ -283,23 +296,38 @@ export default function ContributionsPage() {
           const [year, month] = mois.split('-').map(Number);
           return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
         });
-      const moisImpayes = moisImpayesPour(
-        caisseConfig.dateDebutCaisse,
-        moisAttendus,
-        memberContribs
-      ).map((mois) => {
+      const moisImpayesStates = monthStates.filter((month) => month.mois <= moisActuel && month.statut !== 'PAYE');
+      const moisImpayes = moisImpayesStates.map(({ mois }) => {
         const [year, month] = mois.split('-').map(Number);
         return new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
       });
-      const detteActuelle = moisImpayes.length * montantMensuel;
+      const detteActuelle = moisImpayesStates.reduce(
+        (total, month) => total + Math.max(0, month.montantRequis - month.montantPaye),
+        0
+      );
+      const monthStatesByKey = new Map(monthStates.map((month) => [month.mois, month]));
       const historiquePaiements = moisParContribution
         .flatMap((moisCouvertsContribution, index) => {
-          if (moisCouvertsContribution.length === 0) return [];
           const contribution = memberContribs[index];
+          if (Array.isArray(contribution.repartition)) {
+            return contribution.repartition.map((allocation) => ({
+              mois: allocation.mois,
+              montant: Number(allocation.montantVerse) || 0,
+              montantRequis: monthStatesByKey.get(allocation.mois)?.montantRequis,
+              montantPaye: monthStatesByKey.get(allocation.mois)?.montantPaye,
+              statut: monthStatesByKey.get(allocation.mois)?.statut,
+              modePaiement: contribution.modePaiement || 'Non précisé',
+              datePaiement: normaliserDateFirestore(contribution.datePaiement),
+            }));
+          }
+          if (moisCouvertsContribution.length === 0) return [];
           const montantParMois = Math.round((Number(contribution.montantVerse) || 0) / moisCouvertsContribution.length);
           return moisCouvertsContribution.map((mois) => ({
             mois,
             montant: montantParMois,
+            montantRequis: monthStatesByKey.get(mois)?.montantRequis,
+            montantPaye: monthStatesByKey.get(mois)?.montantPaye,
+            statut: monthStatesByKey.get(mois)?.statut,
             modePaiement: contribution.modePaiement || 'Non précisé',
             datePaiement: normaliserDateFirestore(contribution.datePaiement),
           }));
@@ -315,6 +343,7 @@ export default function ContributionsPage() {
         moisImpayes,
         moisFutursPayes,
         historiquePaiements,
+        etatsMois: monthStates.filter((month) => month.mois <= moisActuel || month.statut === 'PAYE'),
         dernierPaiementDate: historiquePaiements[0]?.datePaiement
           ? new Date(historiquePaiements[0].datePaiement).toLocaleDateString('fr-FR')
           : '-',
@@ -329,6 +358,8 @@ export default function ContributionsPage() {
     membreId: string;
     nombreMois: number;
     moisSelectionnes: string[];
+    montantVerse: number;
+    repartition: AllocationCotisation[];
     modePaiement: string;
     note: string;
     typeContribution?: 'standard' | 'mois-special';
@@ -336,41 +367,74 @@ export default function ContributionsPage() {
   }) => {
     try {
       const estMoisSpecial = formData.typeContribution === 'mois-special';
-      const montantVerse = estMoisSpecial
-        ? caisseConfig.cotisationMoisSpecial
-        : formData.nombreMois * caisseConfig.cotisationMensuelle;
+      const montantVerse = formData.montantVerse;
       const membre = membres.find((item) => item.id === formData.membreId);
+      if (!Number.isSafeInteger(montantVerse) || montantVerse <= 0 ||
+          formData.repartition.reduce((total, allocation) => total + allocation.montantVerse, 0) !== montantVerse) {
+        throw new Error('Le montant ou sa répartition est invalide.');
+      }
 
       if (estMoisSpecial) {
-        if (!caisseConfig.moisSpecial || formData.moisSpecial !== caisseConfig.moisSpecial) {
+        if (!caisseConfig.moisSpecial || !formData.moisSpecial ||
+            normaliserMoisSpecial(formData.moisSpecial.slice(-2)) !== caisseConfig.moisSpecial) {
           throw new Error('Le mois spécial ne correspond pas au mois configuré dans les paramètres.');
         }
-        const moisDejaPaye = new Set(
-          obtenirMoisCouvertsParContributions(
-            contributionsAvecMoisSpecial.filter((contribution) => contribution.membreId === formData.membreId),
-            caisseConfig.dateDebutCaisse
-          ).flat()
+        const monthStates = genererEtatsMoisCotisation(
+          contributionsAvecMoisSpecial.filter((contribution) => contribution.membreId === formData.membreId),
+          caisseConfig.dateDebutCaisse,
+          formData.moisSpecial,
+          caisseConfig.cotisationMensuelle,
+          caisseConfig.moisSpecial,
+          caisseConfig.cotisationMoisSpecial
         );
-        if (moisDejaPaye.has(caisseConfig.moisSpecial)) {
-          throw new Error('Ce membre a déjà payé le mois configuré comme mois spécial.');
+        const targetMonth = monthStates.find((month) => month.mois === formData.moisSpecial);
+        const remaining = targetMonth
+          ? Math.max(0, targetMonth.montantRequis - targetMonth.montantPaye)
+          : 0;
+        if (!targetMonth || targetMonth.statut === 'PAYE' || formData.repartition.length !== 1 ||
+            formData.repartition[0].mois !== targetMonth.mois ||
+            formData.repartition[0].type !== 'SPECIALE' ||
+            formData.repartition[0].montantVerse > remaining) {
+          throw new Error('Ce versement du mois spécial ne correspond pas au solde restant.');
         }
+        const isSettled = formData.repartition[0].montantVerse === remaining;
         await addDoc(collection(db, 'contributions'), {
           membreId: formData.membreId,
-          nombreMois: 1,
-          moisCouverts: [caisseConfig.moisSpecial],
-          moisSelectionnes: [caisseConfig.moisSpecial],
+          nombreMois: 0,
+          moisCouverts: isSettled ? [targetMonth.mois] : [],
+          moisSelectionnes: isSettled ? [targetMonth.mois] : [],
           typeContribution: 'MOIS_SPECIAL',
-          moisSpecial: caisseConfig.moisSpecial,
+          moisSpecial: targetMonth.mois,
+          repartition: formData.repartition,
           montantVerse,
           modePaiement: formData.modePaiement,
           note: formData.note,
           datePaiement: new Date().toISOString(),
         });
       } else {
+        const monthStates = genererEtatsMoisCotisation(
+          contributionsAvecMoisSpecial.filter((contribution) => contribution.membreId === formData.membreId),
+          caisseConfig.dateDebutCaisse,
+          formData.repartition.at(-1)?.mois || new Date().toISOString().slice(0, 7),
+          caisseConfig.cotisationMensuelle,
+          caisseConfig.moisSpecial,
+          caisseConfig.cotisationMoisSpecial
+        );
+        const statesByMonth = new Map(monthStates.map((month) => [month.mois, month]));
+        for (const allocation of formData.repartition) {
+          const month = statesByMonth.get(allocation.mois);
+          if (!month || allocation.type !== 'NORMALE' || month.type !== 'NORMALE' ||
+              month.statut === 'PAYE' || allocation.montantVerse <= 0 ||
+              allocation.montantVerse > month.montantRequis - month.montantPaye) {
+            throw new Error('La répartition standard contient un mois invalide ou spécial.');
+          }
+        }
         await addDoc(collection(db, 'contributions'), {
           membreId: formData.membreId,
           nombreMois: formData.nombreMois,
           moisCouverts: formData.moisSelectionnes,
+          moisSelectionnes: formData.moisSelectionnes,
+          repartition: formData.repartition,
           montantVerse,
           modePaiement: formData.modePaiement,
           note: formData.note,
@@ -429,7 +493,7 @@ export default function ContributionsPage() {
     setIsViewModalOpen(true);
   };
 
-  const columns: Column<StatutMembreContribution>[] = [
+  const columns: Column<ContributionMemberRow>[] = [
     {
       header: 'Membre',
       accessor: (item) => {
@@ -463,7 +527,7 @@ export default function ContributionsPage() {
     {
       header: 'Dette Actuelle',
       accessor: (item) => (
-        <span className={`font-semibold ${item.detteActuelle > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
+        <span className={`font-bold ${item.detteActuelle > 0 }`}>
           {item.detteActuelle > 0 ? `${item.detteActuelle.toLocaleString()} FC` : 'Aucune'}
         </span>
       ),
@@ -484,22 +548,101 @@ export default function ContributionsPage() {
 
   const totalCotisations = contributionsData.reduce((acc, curr) => acc + curr.montantTotalCotise, 0);
   const totalDettes = contributionsData.reduce((acc, curr) => acc + curr.detteActuelle, 0);
-  const contributionsSpeciales: ContributionSpeciale[] = [
-    ...rawContributionsSpeciales,
-    ...rawContributions.filter((contribution) => contribution.typeContribution === 'MOIS_SPECIAL'),
-  ]
-    .map((contribution) => {
-      const membre = membres.find((item) => item.id === contribution.membreId);
-      return {
-        id: contribution.id,
-        nomMembre: membre?.nomComplet || `${membre?.prenom || ''} ${membre?.nom || ''}`.trim() || 'Membre',
-        moisSpecial: contribution.moisSpecial || 'Mois non précisé',
-        montantVerse: Number(contribution.montantVerse) || 0,
-        modePaiement: contribution.modePaiement || 'Non précisé',
-        datePaiement: contribution.datePaiement || '',
-      };
+  const paiementsMoisSpecial = [
+    ...rawContributions
+      .filter((contribution) => contribution.typeContribution === 'MOIS_SPECIAL')
+      .map((contribution) => {
+        const montantAllocation = contribution.repartition
+          ?.filter((allocation) => allocation.type === 'SPECIALE')
+          .reduce((total, allocation) => total + Number(allocation.montantVerse || 0), 0);
+        return {
+          membreId: contribution.membreId,
+          moisSpecial: contribution.moisSpecial ||
+            contribution.repartition?.find((allocation) => allocation.type === 'SPECIALE')?.mois ||
+            '',
+          montantVerse: montantAllocation || Number(contribution.montantVerse) || 0,
+          modePaiement: contribution.modePaiement || 'Non précisé',
+          datePaiement: contribution.datePaiement || '',
+        };
+      }),
+    ...rawContributionsSpeciales.map((contribution) => ({
+      membreId: contribution.membreId,
+      moisSpecial: contribution.moisSpecial,
+      montantVerse: Number(contribution.montantVerse) || 0,
+      modePaiement: contribution.modePaiement || 'Non précisé',
+      datePaiement: contribution.datePaiement || '',
+    })),
+  ];
+  const specialRows = new Map<string, {
+    id: string;
+    nomMembre: string;
+    moisSpecial: string;
+    montantRequis: number;
+    montantVerse: number;
+    modesPaiement: Set<string>;
+    datePaiement: string;
+  }>();
+  const getSpecialRow = (membreId: string, moisSpecial: string, montantRequis: number) => {
+    const id = `${membreId}-${moisSpecial}`;
+    const existing = specialRows.get(id);
+    if (existing) return existing;
+
+    const membre = membres.find((item) => item.id === membreId);
+    const row = {
+      id,
+      nomMembre: membre?.nomComplet || `${membre?.prenom || ''} ${membre?.nom || ''}`.trim() || 'Membre',
+      moisSpecial,
+      montantRequis,
+      montantVerse: 0,
+      modesPaiement: new Set<string>(),
+      datePaiement: '',
+    };
+    specialRows.set(id, row);
+    return row;
+  };
+  contributionsData.forEach((contribution) => {
+    contribution.etatsMois?.forEach((month) => {
+      if (month.type === 'SPECIALE') {
+        getSpecialRow(contribution.membre.id, month.mois, month.montantRequis);
+      }
     });
-  const totalMoisSpecial = contributionsSpeciales.reduce((total, contribution) => total + contribution.montantVerse, 0);
+  });
+  if (caisseConfig.moisSpecial) {
+    const specialMonthThisYear = `${new Date().getFullYear()}-${caisseConfig.moisSpecial}`;
+    if (specialMonthThisYear >= caisseConfig.dateDebutCaisse.slice(0, 7)) {
+      contributionsData.forEach((contribution) => {
+        getSpecialRow(contribution.membre.id, specialMonthThisYear, caisseConfig.cotisationMoisSpecial);
+      });
+    }
+  }
+  paiementsMoisSpecial.forEach((paiement) => {
+    const moisSpecial = /^\d{4}-(0[1-9]|1[0-2])$/.test(paiement.moisSpecial)
+      ? paiement.moisSpecial
+      : 'Mois non précisé';
+    const row = getSpecialRow(paiement.membreId, moisSpecial, caisseConfig.cotisationMoisSpecial);
+    row.montantVerse += paiement.montantVerse;
+    if (paiement.modePaiement && paiement.modePaiement !== 'Non précisé') {
+      row.modesPaiement.add(paiement.modePaiement);
+    }
+    if (paiement.datePaiement &&
+        (!row.datePaiement || Date.parse(paiement.datePaiement) > Date.parse(row.datePaiement))) {
+      row.datePaiement = paiement.datePaiement;
+    }
+  });
+  const contributionsSpeciales: ContributionSpeciale[] = Array.from(specialRows.values()).map((row) => ({
+    id: row.id,
+    nomMembre: row.nomMembre,
+    moisSpecial: row.moisSpecial,
+    montantRequis: row.montantRequis,
+    montantVerse: row.montantVerse,
+    montantRestant: Math.max(0, row.montantRequis - row.montantVerse),
+    statut: statutMoisCotisation(row.montantVerse, row.montantRequis),
+    modePaiement: row.modesPaiement.size > 1
+      ? 'Plusieurs'
+      : Array.from(row.modesPaiement)[0] || '—',
+    datePaiement: row.datePaiement,
+  }));
+  const totalMoisSpecial = paiementsMoisSpecial.reduce((total, paiement) => total + paiement.montantVerse, 0);
 
   const penalitesAvecMembre: PenaliteAvecMembre[] = penalites.map((penalite) => {
     const membre = membres.find((item) => item.id === penalite.membreId);
@@ -522,7 +665,7 @@ export default function ContributionsPage() {
   const totalPenalitesPayees = penalites.reduce((total, penalite) => total + penalite.montantPaye, 0);
   const totalPenalitesRestantes = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
 
-  const cotisationsExportRows = contributionsData.map((item) => ({
+  const toCotisationExportRow = (item: StatutMembreContribution) => ({
     nom: item.membre.nomComplet || `${item.membre.prenom} ${item.membre.nom}`.trim(),
     telephone: item.membre.telephone,
     totalCotise: item.montantTotalCotise,
@@ -534,8 +677,8 @@ export default function ContributionsPage() {
     moisImpayes: item.moisImpayes.join(', '),
     moisFuturs: item.moisFutursPayes.join(', '),
     dernierPaiement: item.dernierPaiementDate || '—',
-  }));
-  const cotisationsExportColumns: CsvColumn<(typeof cotisationsExportRows)[number]>[] = [
+  });
+  const cotisationsExportColumns: CsvColumn<ReturnType<typeof toCotisationExportRow>>[] = [
     { header: 'Membre', value: (row) => row.nom },
     { header: 'Téléphone', value: (row) => row.telephone },
     { header: 'Total cotisé (FC)', value: (row) => row.totalCotise },
@@ -549,29 +692,33 @@ export default function ContributionsPage() {
   const moisSpecialExportColumns: CsvColumn<ContributionSpeciale>[] = [
     { header: 'Membre', value: (row) => row.nomMembre },
     { header: 'Mois spécial', value: (row) => row.moisSpecial },
-    { header: 'Montant versé (FC)', value: (row) => row.montantVerse },
+    { header: 'Montant requis (FC)', value: (row) => row.montantRequis },
+    { header: 'Montant payé (FC)', value: (row) => row.montantVerse },
+    { header: 'Solde restant (FC)', value: (row) => row.montantRestant },
+    { header: 'Statut', value: (row) => row.statut },
     { header: 'Mode de paiement', value: (row) => row.modePaiement },
     { header: 'Date de paiement', value: (row) => row.datePaiement },
   ];
-  const penalitesExportRows = [
-    ...penalitesAvecMembre.map((penalite) => ({
-      membre: penalite.nomMembre,
-      periode: penalite.moisDeclenchementKey,
-      du: penalite.montantDu,
-      paye: penalite.montantPaye,
-      solde: soldePenalite(penalite),
-      dernierPaiement: penalite.dateDernierPaiement || '—',
-    })),
+  const toPenaliteExportRow = (penalite: PenaliteAvecMembre) => ({
+    membre: penalite.nomMembre,
+    periode: penalite.moisDeclenchementKey,
+    du: penalite.montantDu,
+    paye: penalite.montantPaye,
+    solde: soldePenalite(penalite),
+    dernierPaiement: penalite.dateDernierPaiement || '—',
+  });
+  const buildPenalitesExportRows = (rows: readonly PenaliteAvecMembre[]) => [
+    ...rows.map(toPenaliteExportRow),
     {
       membre: 'TOTAL',
-      periode: `${penalites.length} pénalité(s)`,
-      du: totalPenalitesDues,
-      paye: totalPenalitesPayees,
-      solde: totalPenalitesRestantes,
+      periode: `${rows.length} pénalité(s)`,
+      du: rows.reduce((total, penalite) => total + penalite.montantDu, 0),
+      paye: rows.reduce((total, penalite) => total + penalite.montantPaye, 0),
+      solde: rows.reduce((total, penalite) => total + soldePenalite(penalite), 0),
       dernierPaiement: '',
     },
   ];
-  const penalitesExportColumns: CsvColumn<(typeof penalitesExportRows)[number]>[] = [
+  const penalitesExportColumns: CsvColumn<ReturnType<typeof toPenaliteExportRow>>[] = [
     { header: 'Membre', value: (row) => row.membre },
     { header: 'Période déclenchée', value: (row) => row.periode },
     { header: 'Montant dû (FC)', value: (row) => row.du },
@@ -579,32 +726,6 @@ export default function ContributionsPage() {
     { header: 'Solde restant (FC)', value: (row) => row.solde },
     { header: 'Dernier paiement', value: (row) => row.dernierPaiement },
   ];
-  const exportButton = activeTab === 'cotisations' ? (
-    <ExportCsvButton
-      filename="rapport-cotisations"
-      columns={cotisationsExportColumns}
-      rows={cotisationsExportRows}
-      label="Exporter le rapport"
-      disabled={isLoading || isSpecialLoading}
-    />
-  ) : activeTab === 'mois-special' ? (
-    <ExportCsvButton
-      filename="rapport-mois-special"
-      columns={moisSpecialExportColumns}
-      rows={contributionsSpeciales}
-      label="Exporter le rapport"
-      disabled={isSpecialLoading}
-    />
-  ) : (
-    <ExportCsvButton
-      filename="rapport-penalites"
-      columns={penalitesExportColumns}
-      rows={penalitesExportRows}
-      label="Exporter les pénalités"
-      disabled={isPenaltiesLoading}
-    />
-  );
-
   return (
     <div className="relative space-y-6">
       {/* Toast de notification */}
@@ -623,12 +744,14 @@ export default function ContributionsPage() {
             {activeTab === 'cotisations'
               ? <>Suivi basé sur le lancement de la caisse au <strong>{caisseConfig.dateDebutCaisse}</strong> ({caisseConfig.cotisationMensuelle.toLocaleString()} FC/mois).</>
               : activeTab === 'mois-special'
-                ? <>Mois configuré : <strong>{caisseConfig.moisSpecial || 'non défini'}</strong> · {caisseConfig.cotisationMoisSpecial.toLocaleString()} FC.</>
+                ? <>Mois configuré : <strong>{caisseConfig.moisSpecial
+                    ? new Date(2000, Number(caisseConfig.moisSpecial) - 1, 1).toLocaleDateString('fr-FR', { month: 'long' })
+                    : 'non défini'}</strong> · {caisseConfig.cotisationMoisSpecial.toLocaleString()} FC.</>
                 : <>Suivi des pénalités enregistrées, des paiements partiels et des soldes restants.</>}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {exportButton}
+
           {activeTab === 'penalites' ? (
             <button
               type="button"
@@ -650,100 +773,28 @@ export default function ContributionsPage() {
         </div>
       </div>
 
-      <div className="flex w-fit rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-        <button
-          type="button"
-          onClick={() => setActiveTab('cotisations')}
-          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-            activeTab === 'cotisations'
-              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
-          }`}
-        >
-          <Wallet size={15} /> Contributions
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('mois-special')}
-          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-            activeTab === 'mois-special'
-              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
-          }`}
-        >
-          <CalendarDays size={15} /> Mois spécial
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('penalites')}
-          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
-            activeTab === 'penalites'
-              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
-          }`}
-        >
-          <ShieldAlert size={15} /> Pénalités
-        </button>
-      </div>
+      <ContributionTabs activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'cotisations' ? (
-        <>
-{/* Cartes KPI : 2 par ligne sur petit écran, et 3 sur la même ligne sur grand écran */}
-      {isLoading || isSpecialLoading ? (
-        <PageSkeleton layout="cards-table" cards={3} columns={6} rows={6} />
-      ) : (
-        <>
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Cotisé</span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              <PiggyBank size={18} />
-            </div>
-          </div>
-          <p className="mt-2 truncate text-lg font-extrabold tabular-nums sm:text-xl">
-            {totalCotisations.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
-          </p>
-        </div>
-
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Dettes Globales</span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              <AlertCircle size={18} />
-            </div>
-          </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums  truncate">
-            {totalDettes.toLocaleString()} <span className="text-xs font-normal text-slate-500">FC</span>
-          </p>
-        </div>
-
-        {/* La 3ème carte s'étale sur 2 colonnes en bas sur mobile, et reprend sa place normale sur grand écran */}
-        <div className="col-span-2 lg:col-span-1 group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Membres à jour</span>
-            <div className="shrink-0 rounded-lg bg-slate-100 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              <CheckCircle size={18} />
-            </div>
-          </div>
-          <p className="mt-2 text-lg sm:text-xl font-extrabold tabular-nums text-slate-900 dark:text-white truncate">
-            {contributionsData.filter((d) => d.detteActuelle === 0).length} <span className="text-xs font-normal text-slate-500">/ {contributionsData.length}</span>
-          </p>
-        </div>
-      </div>
-        <DataTable
-          data={contributionsData.map((d) => ({ ...d, id: d.membre.id }))}
+        <ContributionsMembersSection
+          data={contributionsData.map((contribution) => ({ ...contribution, id: contribution.membre.id }))}
           columns={columns}
+          totalCotisations={totalCotisations}
+          totalDettes={totalDettes}
+          membresAJour={contributionsData.filter((contribution) => contribution.detteActuelle === 0).length}
+          nombreMembres={contributionsData.length}
+          isLoading={isLoading || isSpecialLoading}
           onView={openHistoriqueView}
+          onExport={(rows) => exportCsv('rapport-cotisations', cotisationsExportColumns, rows.map(toCotisationExportRow))}
         />
-        </>
-      )}
-        </>
       ) : activeTab === 'mois-special' ? (
         <SpecialMonthSection
           contributions={contributionsSpeciales}
           total={totalMoisSpecial}
+          nombreVersements={paiementsMoisSpecial.length}
           isLoading={isLoading || isSpecialLoading}
+          exportLabel="Exporter le rapport"
+          onExport={(rows) => exportCsv('rapport-mois-special', moisSpecialExportColumns, rows)}
         />
       ) : (
         <PenaltiesSection
@@ -753,6 +804,8 @@ export default function ContributionsPage() {
           soldeTotal={totalPenalitesRestantes}
           nombrePaiements={paiementsPenalites.length}
           isLoading={isPenaltiesLoading || isLoading}
+          exportLabel="Exporter les pénalités"
+          onExport={(rows) => exportCsv('rapport-penalites', penalitesExportColumns, buildPenalitesExportRows(rows))}
         />
       )}
 

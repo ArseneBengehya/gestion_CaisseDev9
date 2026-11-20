@@ -20,9 +20,9 @@ import {
 import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import Modal from "@/components/ui/Modal";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import PageSkeleton from "@/components/ui/PageSkeleton";
+import { formaterDateNotification } from "@/src/lib/expense-notifications";
 
 export default function MembreLayout({
   children,
@@ -162,7 +162,7 @@ export default function MembreLayout({
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 sm:p-8">
+      <div className="min-h-screen bg-slate-50 p-4 dark:bg-slate-950 sm:p-6">
         <PageSkeleton layout="member-dashboard" />
       </div>
     );
@@ -225,7 +225,7 @@ export default function MembreLayout({
                   onClick={() => setIsSidebarOpen(false)}
                   className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 ${
                     isActive
-                      ? "bg-slate-900 text-white dark:bg-blue-600 shadow-sm"
+                      ? "border-slate-200 bg-slate-100 text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
@@ -294,6 +294,7 @@ export default function MembreLayout({
                 </span>
               )}
             </button>
+
             <ThemeToggle />
 
             {/* Avatar / Profil rapide */}
@@ -316,52 +317,81 @@ export default function MembreLayout({
         <main className="p-4 sm:p-6 lg:p-8 flex-1 w-full">{children}</main>
       </div>
 
-      {/* 🪟 MODAL DES NOTIFICATIONS EN DIRECT */}
-      <Modal
-        isOpen={isNotifOpen}
-        onClose={closeNotifications}
-        title="Centre de Notifications"
-        maxWidth="md"
-      >
-        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-          {notifications.length > 0 ? (
-            notifications.map((notif: any) => (
-              <div
-                key={notif.id}
-                className={`p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5 transition-all hover:bg-slate-100/80 dark:hover:bg-slate-800 ${
-                  unreadIds.includes(notif.id)
-                    ? "bg-blue-50 font-bold dark:bg-blue-950/30"
-                    : "bg-slate-50 dark:bg-slate-800/40"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                    {notif.titre || "Mise à jour"}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {notif.date
-                      ? new Date(notif.date).toLocaleDateString("fr-FR", {
-                          day: "numeric",
-                          month: "short",
-                        })
-                      : "Récemment"}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {notif.message}
+      {isNotifOpen && (
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="notification-page-title"
+          className="fixed inset-0 z-60 flex flex-col bg-[#F8FAFC] text-slate-800 dark:bg-slate-950 dark:text-slate-100"
+        >
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900 sm:px-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <Bell size={18} />
+              </div>
+              <div>
+                <h1 id="notification-page-title" className="text-sm font-bold text-slate-900 dark:text-white sm:text-base">
+                  Centre de notifications
+                </h1>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {notifications.length} notification{notifications.length > 1 ? "s" : ""}
                 </p>
               </div>
-            ))
-          ) : (
-            <div className="text-center py-10 space-y-2">
-              <Bell size={28} className="mx-auto text-slate-300 dark:text-slate-700" />
-              <p className="text-xs text-slate-500 font-medium">Aucune nouvelle notification pour l'instant.</p>
-              <p className="text-[11px] text-slate-400">Les modifications de l'admin apparaîtront ici instantanément.</p>
             </div>
-          )}
-        </div>
-      </Modal>
+            <button
+              type="button"
+              onClick={closeNotifications}
+              aria-label="Fermer les notifications"
+              title="Fermer"
+              className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+            >
+              <X size={20} />
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
+            <div className="mx-auto w-full max-w-3xl space-y-3">
+              {notifications.length > 0 ? (
+                notifications.map((notif: any) => (
+                  <article
+                    key={notif.id}
+                    className={`rounded-xl border p-4 transition-colors sm:p-5 ${
+                      unreadIds.includes(notif.id)
+                        ? "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30"
+                        : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${unreadIds.includes(notif.id) ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-600"}`} />
+                        {notif.titre || "Mise à jour"}
+                      </h2>
+                      <time className="shrink-0 text-xs text-slate-400">
+                        {formaterDateNotification(notif.date || "")}
+                      </time>
+                    </div>
+                    <p className="mt-2 pl-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                      {notif.message}
+                    </p>
+                  </article>
+                ))
+              ) : (
+                <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
+                    <Bell size={26} />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200">Aucune notification</h2>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Les nouvelles informations apparaîtront ici.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

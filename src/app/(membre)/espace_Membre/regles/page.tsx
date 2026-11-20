@@ -11,6 +11,7 @@ import PageSkeleton from "../../../../components/ui/PageSkeleton";
 export default function ReglesCaissePage() {
   const [regles, setRegles] = useState<RegleCaisse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [parametres, setParametres] = useState({ cotisationMensuelle: 5000, cotisationMoisSpecial: 10000, dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT });
 
   useEffect(() => {
@@ -40,6 +41,10 @@ export default function ReglesCaissePage() {
           }))
         : [];
       setRegles(personnalisées as unknown as RegleCaisse[]);
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Erreur lors du chargement des règles de la caisse :", error);
+      setLoadError(true);
       setIsLoading(false);
     });
 
@@ -81,6 +86,11 @@ export default function ReglesCaissePage() {
       </div>
 
       {/* Liste des règles */}
+      {loadError ? (
+        <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+          Impossible de charger les règles de la caisse pour le moment.
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-4">
         {regles.length > 0 ? (
           regles.map((regle) => (
@@ -90,9 +100,6 @@ export default function ReglesCaissePage() {
                   <ShieldCheck size={18} className="text-emerald-600" />
                   <span>{regle.titre || "Règlement Officiel de la Caisse Dev9"}</span>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-                  Devise : {regle.devise || "FC"}
-                </span>
               </div>
 
               {regle.contenu && regle.contenu.length > 0 && (
@@ -114,6 +121,7 @@ export default function ReglesCaissePage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

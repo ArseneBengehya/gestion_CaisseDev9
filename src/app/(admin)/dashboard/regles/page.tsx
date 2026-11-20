@@ -57,6 +57,14 @@ const formatDate = (value: string) => {
     : date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
 };
 
+const normaliserMoisConfig = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const month = value.match(/^(?:\d{4}-)?(\d{1,2})$/)?.[1];
+  return month && Number(month) >= 1 && Number(month) <= 12
+    ? String(Number(month)).padStart(2, '0')
+    : '';
+};
+
 const compressLogo = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -146,7 +154,7 @@ export default function ReglesEtParametresPage() {
         const montantPenaliteConfig = Number(data.montantPenalite ?? 1000);
         setCotisationMensuelle(Number.isFinite(cotisationStandard) ? cotisationStandard : 5000);
         setCotisationMoisSpecial(Number.isFinite(cotisationSpeciale) ? cotisationSpeciale : 10000);
-        setMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : '');
+        setMoisSpecial(normaliserMoisConfig(data.moisSpecial));
         setDateDebutCaisse(data.dateDebutCaisse || '2025-01-01');
         setCaisseLogo(data.caisseLogo || '');
         setPenaliteRetardActive(data.penaliteRetardActive ?? true);
@@ -187,7 +195,7 @@ export default function ReglesEtParametresPage() {
         { rubrique: 'Caisse', nom: 'Date de début', valeur: dateDebutCaisse },
         { rubrique: 'Cotisations', nom: 'Cotisation standard', valeur: `${cotisationMensuelle.toLocaleString('fr-FR')} FC` },
         { rubrique: 'Cotisations', nom: 'Cotisation mois spécial', valeur: `${cotisationMoisSpecial.toLocaleString('fr-FR')} FC` },
-        { rubrique: 'Cotisations', nom: 'Mois spécial configuré', valeur: moisSpecial || 'Non défini' },
+        { rubrique: 'Cotisations', nom: 'Mois spécial configuré', valeur: moisSpecial ? new Date(2000, Number(moisSpecial) - 1, 1).toLocaleDateString('fr-FR', { month: 'long' }) : 'Non défini' },
         { rubrique: 'Pénalités', nom: 'État', valeur: penaliteRetardActive ? 'Activées' : 'Désactivées' },
         { rubrique: 'Pénalités', nom: 'Seuil de retard', valeur: `${moisRetardAvantPenalite} mois impayés` },
         { rubrique: 'Pénalités', nom: 'Montant', valeur: `${montantPenalite.toLocaleString('fr-FR')} FC` },
@@ -326,7 +334,7 @@ export default function ReglesEtParametresPage() {
 
     if (
       !draftConfig.dateDebutCaisse ||
-      !/^\d{4}-(0[1-9]|1[0-2])$/.test(draftConfig.moisSpecial) ||
+      !/^(0[1-9]|1[0-2])$/.test(draftConfig.moisSpecial) ||
       !Number.isFinite(draftConfig.cotisationMensuelle) || draftConfig.cotisationMensuelle < 0 ||
       !Number.isFinite(draftConfig.cotisationMoisSpecial) || draftConfig.cotisationMoisSpecial < 0 ||
       !Number.isInteger(draftConfig.moisRetardAvantPenalite) || draftConfig.moisRetardAvantPenalite < 1 ||
@@ -543,7 +551,7 @@ export default function ReglesEtParametresPage() {
                     <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mois spécial configuré</p>
                     <p className="mt-1 text-lg font-bold capitalize text-slate-900 dark:text-white">
                       {moisSpecial
-                        ? new Date(`${moisSpecial}-01T00:00:00`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+                        ? new Date(2000, Number(moisSpecial) - 1, 1).toLocaleDateString('fr-FR', { month: 'long' })
                         : 'Non défini'}
                     </p>
                   </div>
@@ -674,8 +682,14 @@ export default function ReglesEtParametresPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">Mois spécial concerné</label>
-                <input type="month" required value={draftConfig.moisSpecial} onChange={(event) => updateDraft('moisSpecial', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-slate-700" />
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Seul ce mois pourra être réglé dans l’onglet « Mois spécial ».</p>
+                <select required value={draftConfig.moisSpecial} onChange={(event) => updateDraft('moisSpecial', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-slate-700">
+                  <option value="">Choisir un mois</option>
+                  {Array.from({ length: 12 }, (_, index) => {
+                    const value = String(index + 1).padStart(2, '0');
+                    return <option key={value} value={value}>{new Date(2000, index, 1).toLocaleDateString('fr-FR', { month: 'long' })}</option>;
+                  })}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Ce mois spécial se répète automatiquement chaque année.</p>
               </div>
             </div>
           </section>

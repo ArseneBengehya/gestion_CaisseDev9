@@ -8,27 +8,14 @@ import AddEmpruntModal from '@/src/components/modals/AddEmpruntModal';
 import EditEmpruntModal from '@/src/components/modals/EditEmpruntModal';
 import PayEmpruntModal from '@/src/components/modals/PayEmpruntModal';
 import Toast from '@/src/components/ui/Toast';
-import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
 
 // Import Firestore
-import {
-  collection,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  doc,
-} from 'firebase/firestore';
+import {collection,onSnapshot,addDoc,updateDoc,doc,} from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
-import type { CsvColumn } from '@/src/lib/export-csv';
+import { exportCsv, type CsvColumn } from '@/src/lib/export-csv';
 import PageSkeleton from '@/src/components/ui/PageSkeleton';
-import {
-  dateEcheanceSelonDelai,
-  enregistrerPaiementEmprunt,
-  PalierPret,
-  PALIERS_PRETS_PAR_DEFAUT,
-  trouverPalierPret,
-} from '@/src/lib/loans';
+import { dateEcheanceSelonDelai, enregistrerPaiementEmprunt, PalierPret, PALIERS_PRETS_PAR_DEFAUT, trouverPalierPret,} from '@/src/lib/loans';
 
 export default function EmpruntsPage() {
   const [emprunts, setEmprunts] = useState<Emprunt[]>([]);
@@ -175,7 +162,7 @@ export default function EmpruntsPage() {
       await addNotification({
         membreId: 'TOUS',
         titre: 'Nouvel emprunt',
-        message: `Un emprunt de ${data.montantEmprunte.toLocaleString()} FC a été enregistré pour ${nomMembre}.`,
+        message: `Un emprunt a été enregistré pour ${nomMembre}.`,
         type: 'info',
       });
 
@@ -410,13 +397,6 @@ export default function EmpruntsPage() {
           >
             <Banknote size={18} /> Payer
           </button>
-          <ExportCsvButton
-            filename="rapport-emprunts"
-            columns={exportColumns}
-            rows={emprunts}
-            label="Exporter"
-            disabled={isLoading}
-          />
         </div>
       </div>
 
@@ -457,6 +437,8 @@ export default function EmpruntsPage() {
           columns={columns}
           searchKey="nomMembre"
           searchPlaceholder="Rechercher par nom de membre..."
+          exportFilename="rapport-emprunts"
+          onExport={(rows) => exportCsv('rapport-emprunts', exportColumns, rows)}
         />
 
         </>

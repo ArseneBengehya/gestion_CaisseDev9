@@ -4,14 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, CheckCircle, AlertCircle, Shield } from 'lucide-react';
 
 // Importation de notre base de données Firestore
-import {
-  collection,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc,} from 'firebase/firestore';
 import { Membre } from '@/src/types';
 import DataTable, { Column } from '@/src/components/ui/DataTable';
 import Toast from '@/src/components/ui/Toast';

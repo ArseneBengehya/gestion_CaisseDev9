@@ -16,16 +16,20 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'caisse_config'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.caisseLogo) {
-          setLogoCaisse(data.caisseLogo);
+    const unsub = onSnapshot(
+      doc(db, 'settings', 'caisse_config'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setLogoCaisse(data.caisseLogo || null);
         } else {
           setLogoCaisse(null);
         }
+      },
+      (err) => {
+        console.error('Erreur chargement configuration caisse :', err);
       }
-    });
+    );
     return () => unsub();
   }, []);
 
@@ -43,7 +47,7 @@ export default function LoginPage() {
 
     try {
       const membresRef = collection(db, 'membres');
-      
+
       let q = query(membresRef, where('telephone', '==', cleanInput));
       let querySnapshot = await getDocs(q);
 
@@ -53,7 +57,7 @@ export default function LoginPage() {
       }
 
       if (querySnapshot.empty) {
-        setErrorMessage("Identifiant incorrect.");
+        setErrorMessage('Identifiant incorrect.');
         setIsLoading(false);
         return;
       }
@@ -63,21 +67,25 @@ export default function LoginPage() {
 
       // Vérification stricte du statut du membre (bloque si inactif ou supprimé logiquement)
       if (membreData.statut === 'INACTIF' || membreData.statut === 'SUPPRIME') {
-        setErrorMessage("Votre compte est inactif ou a été supprimé. Contactez l'administration.");
+        setErrorMessage(
+          "Votre compte est inactif ou a été supprimé. Contactez l'administration."
+        );
         setIsLoading(false);
         return;
       }
 
       // Vérification du Mot de Passe
       if (membreData.motDePasse && membreData.motDePasse !== motDePasse) {
-        setErrorMessage("Mot de passe incorrect.");
+        setErrorMessage('Mot de passe incorrect.');
         setIsLoading(false);
         return;
       }
 
       const userSession = {
         id: membreDoc.id,
-        nomComplet: membreData.nomComplet || `${membreData.prenom || ''} ${membreData.nom || ''}`.trim(),
+        nomComplet:
+          membreData.nomComplet ||
+          `${membreData.prenom || ''} ${membreData.nom || ''}`.trim(),
         telephone: membreData.telephone || '',
         photoUrl: membreData.photoUrl || '',
         role: membreData.role || 'MEMBRE',
@@ -90,10 +98,16 @@ export default function LoginPage() {
       } else {
         router.push('/espace_Membre');
       }
-
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Erreur lors de la connexion :', error);
-      setErrorMessage('Erreur de connexion. Veuillez réessayer.');
+      const firebaseError = error as { code?: string };
+      if (firebaseError?.code === 'permission-denied') {
+        setErrorMessage(
+          'Permissions Firestore insuffisantes. Vérifiez les règles sur "membres" et "settings".'
+        );
+      } else {
+        setErrorMessage('Erreur de connexion. Veuillez réessayer.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -102,17 +116,24 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 dark:bg-slate-950">
       <div className="w-full max-w-md space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20 sm:p-8">
-        
-        <div className="text-center space-y-2">
-          <div className="inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-slate-600 mb-2 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 shadow-sm">
+        <div className="space-y-2 text-center">
+          <div className="mb-2 inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             {logoCaisse ? (
-              <img src={logoCaisse} alt="Logo Caisse Dev9" className="h-full w-full object-cover" />
+              <img
+                src={logoCaisse}
+                alt="Logo Caisse Dev9"
+                className="h-full w-full object-cover"
+              />
             ) : (
               <Shield size={32} />
             )}
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Caisse Dev9</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Espace de connexion</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Caisse Dev9
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Espace de connexion
+          </p>
         </div>
 
         {errorMessage && (
@@ -135,7 +156,10 @@ export default function LoginPage() {
                 required
                 className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
               />
-              <Phone size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Phone
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
             </div>
           </div>
 
@@ -152,12 +176,15 @@ export default function LoginPage() {
                 required
                 className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-500 dark:focus:ring-slate-800"
               />
-              <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              
+              <Lock
+                size={18}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -169,7 +196,11 @@ export default function LoginPage() {
             disabled={isLoading}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:opacity-60 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
-            {isLoading ? <Loader2 size={18} className="animate-spin" /> : 'Se connecter'}
+            {isLoading ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              'Se connecter'
+            )}
           </button>
         </form>
       </div>

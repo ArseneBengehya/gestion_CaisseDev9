@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, ArrowUpRight, CalendarDays, ShieldAlert, TrendingUp, Wallet } from 'lucide-react';
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
-import { ContributionMonthRecord, DATE_DEBUT_CAISSE_PAR_DEFAUT, obtenirMoisCouvertsParContributions } from '@/src/lib/contribution-months';
+import { ContributionMonthRecord, DATE_DEBUT_CAISSE_PAR_DEFAUT } from '@/src/lib/contribution-months';
+import { genererEtatsMoisCotisation, normaliserMoisSpecial } from '@/src/lib/contribution-payments';
 import DebtCalendar, { MonthlyDebtMember } from '@/src/components/ui/DebtCalendar';
 import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
 import PageSkeleton from '@/src/components/ui/PageSkeleton';
@@ -26,6 +27,7 @@ interface DashboardContribution extends ContributionMonthRecord {
   nombreMois: number;
   typeContribution?: string;
   moisSpecial?: string;
+  repartition?: unknown;
 }
 
 interface DashboardExpense {
@@ -71,7 +73,9 @@ const amountForMonth = (
   monthlyAmount: number,
   specialAmount: number,
   specialMonth: string
-): number => (month && month === specialMonth ? specialAmount : monthlyAmount);
+): number => (month && specialMonth && month.endsWith(`-${normaliserMoisSpecial(specialMonth)}`)
+  ? specialAmount
+  : monthlyAmount);
 
 export default function AdminDashboardPage() {
   const [soldeActuel, setSoldeActuel] = useState(0);
@@ -139,37 +143,35 @@ export default function AdminDashboardPage() {
 
       membres.forEach((membre) => {
         const contributionsMembre = contributions.filter((contribution) => contribution.membreId === membre.id);
-        const moisPayes = new Set(
-          obtenirMoisCouvertsParContributions(contributionsMembre, dateDebut).flat()
+        const monthStates = genererEtatsMoisCotisation(
+          contributionsMembre,
+          dateDebut,
+          currentMonth,
+          cotisationMensuelle,
+          moisSpecial,
+          cotisationMoisSpecial,
+          1
         );
+        const statesByMonth = new Map(monthStates.map((month) => [month.mois, month]));
         if (
           membre.statut !== 'INACTIF' &&
-          moisAttendus.some((month) => !moisPayes.has(month))
+          monthStates.some((month) => month.mois <= currentMonth && month.statut !== 'PAYE')
         ) {
           totalMembresEnRetard += 1;
         }
         const nom = membre.nomComplet || `${membre.prenom} ${membre.nom}`.trim() || 'Membre';
         moisAttendus.forEach((month) => {
-          if (moisPayes.has(month)) return;
-          const montant = amountForMonth(month, cotisationMensuelle, cotisationMoisSpecial, moisSpecial);
+          const monthState = statesByMonth.get(month);
+          if (!monthState || monthState.statut === 'PAYE') return;
+          const montant = Math.max(0, monthState.montantRequis - monthState.montantPaye);
           totalCotisationsEnDette += montant;
           if (!dettes[month]) dettes[month] = [];
           dettes[month].push({ id: membre.id, nom, montant });
         });
-        if (moisPayes.has(nextMonth)) {
-          totalAvanceProchainMois += amountForMonth(
-            nextMonth,
-            cotisationMensuelle,
-            cotisationMoisSpecial,
-            moisSpecial
-          );
-        }
-        totalAvanceMoisFuturs += Array.from(moisPayes)
-          .filter((month) => month > currentMonth)
-          .reduce(
-            (total, month) => total + amountForMonth(month, cotisationMensuelle, cotisationMoisSpecial, moisSpecial),
-            0
-          );
+        totalAvanceProchainMois += statesByMonth.get(nextMonth)?.montantPaye || 0;
+        totalAvanceMoisFuturs += monthStates
+          .filter((month) => month.mois > currentMonth)
+          .reduce((total, month) => total + month.montantPaye, 0);
       });
 
       const penalisationsRestantes = penalites.reduce(
@@ -237,6 +239,7 @@ export default function AdminDashboardPage() {
           datePaiement: data.datePaiement,
           typeContribution: typeof data.typeContribution === 'string' ? data.typeContribution : undefined,
           moisSpecial: typeof data.moisSpecial === 'string' ? data.moisSpecial : undefined,
+          repartition: data.repartition,
         };
       });
       refreshDashboard();
@@ -318,7 +321,7 @@ export default function AdminDashboardPage() {
         dateDebut = typeof data.dateDebutCaisse === 'string' ? data.dateDebutCaisse : DATE_DEBUT_CAISSE_PAR_DEFAUT;
         cotisationMensuelle = Number(data.cotisationMensuelle) || 5000;
         cotisationMoisSpecial = Number(data.cotisationMoisSpecial) || 10000;
-        moisSpecial = typeof data.moisSpecial === 'string' ? data.moisSpecial : '';
+        moisSpecial = normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : '');
       }
       refreshDashboard();
       markSourceLoaded();

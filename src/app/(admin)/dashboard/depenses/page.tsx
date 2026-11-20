@@ -9,21 +9,14 @@ import EditDepenseModal from '@/src/components/modals/EditDepenseModal';
 import ViewDepenseModal from '@/src/components/modals/ViewDepenseModal';
 import Toast from '@/src/components/ui/Toast';
 import ConfirmDeleteModal from '@/src/components/ui/ConfirmDeleteModal';
-import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
 import PageSkeleton from '@/src/components/ui/PageSkeleton';
 
 // Import Firestore
-import {
-  collection,
-  onSnapshot,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc,} from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { addNotification } from '@/src/services/dbService';
-import type { CsvColumn } from '@/src/lib/export-csv';
+import { exportCsv, type CsvColumn } from '@/src/lib/export-csv';
+import { genererNotificationDepense } from '@/src/lib/expense-notifications';
 
 export default function DepensesPage() {
   const [depenses, setDepenses] = useState<Depense[]>([]);
@@ -96,17 +89,23 @@ export default function DepensesPage() {
         motif: newDepenseData.motif,
         montant: newDepenseData.montant,
         categorie: newDepenseData.categorie,
-        dateDepense: new Date().toISOString().split('T')[0],
+        dateDepense: new Date().toISOString(),
         approuvePar: newDepenseData.approuvePar,
       };
 
       await addDoc(collection(db, 'depenses'), nouvelleDepense);
-      await addNotification({
-        membreId: 'TOUS',
-        titre: 'Nouvelle dépense',
-        message: `Une dépense de ${newDepenseData.montant.toLocaleString()} FC a été enregistrée pour ${newDepenseData.motif}.`,
-        type: 'alerte',
-      });
+      const notification = genererNotificationDepense(newDepenseData);
+      try {
+        await addNotification({
+          membreId: 'TOUS',
+          ...notification,
+        });
+      } catch (notificationError) {
+        console.error('Erreur lors de l’envoi de la notification de dépense :', notificationError);
+        showToast('error', 'Dépense enregistrée, mais la notification n’a pas pu être envoyée.');
+        setIsAddOpen(false);
+        return;
+      }
       showToast('success', `Dépense de ${newDepenseData.montant.toLocaleString()} FC enregistrée avec succès !`);
       setIsAddOpen(false);
     } catch (error) {
@@ -226,13 +225,6 @@ export default function DepensesPage() {
             <PlusCircle size={18} />
             Nouvelle Dépense
           </button>
-          <ExportCsvButton
-            filename="rapport-depenses"
-            columns={exportColumns}
-            rows={depenses}
-            label="Exporter"
-            disabled={isLoading}
-          />
         </div>
       </div>
 
@@ -273,6 +265,8 @@ export default function DepensesPage() {
           columns={columns}
           searchKey="motif"
           searchPlaceholder="Rechercher par motif..."
+          exportFilename="rapport-depenses"
+          onExport={(rows) => exportCsv('rapport-depenses', exportColumns, rows)}
           onView={openView}
           onEdit={openEdit}
           onDelete={(item) => setDepenseToDelete(item)}
