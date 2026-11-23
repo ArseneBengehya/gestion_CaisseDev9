@@ -463,12 +463,12 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="space-y-4 pb-6">
-      <div className="grid w-full max-w-md grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 sm:flex sm:w-fit">
+    <div className="space-y-8 pb-6">
+      <div className="flex w-fit max-w-full rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
         <button
           type="button"
           onClick={() => setActiveTab("cotisations")}
-          className={`inline-flex items-center justify-center rounded-lg px-2 py-2 text-xs font-semibold transition-all sm:px-4 ${
+          className={`inline-flex items-center gap-2 rounded-lg px-3  text-xs font-semibold transition-all ${
             activeTab === "cotisations"
               ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400"
@@ -479,7 +479,7 @@ export default function TransactionsPage() {
         <button
           type="button"
           onClick={() => setActiveTab("penalites")}
-          className={`inline-flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold transition-all sm:px-4 ${
+          className={`inline-flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold transition-all ${
             activeTab === "penalites"
               ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400"
@@ -490,7 +490,7 @@ export default function TransactionsPage() {
         <button
           type="button"
           onClick={() => setActiveTab("emprunts")}
-          className={`col-span-2 inline-flex items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold transition-all sm:col-span-1 sm:px-4 ${
+          className={`inline-flex items-center gap-2 rounded-lg px-2 text-xs font-semibold transition-all ${
             activeTab === "emprunts"
               ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
               : "text-slate-600 hover:text-slate-900 dark:text-slate-400"
@@ -512,9 +512,9 @@ export default function TransactionsPage() {
       </div>
       
       {/* 📊 CARTES KPI SYNCHRONISÉES */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         {/* Mois payés */}
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+        <div className="group relative min-w-0 md:grid-cols-2 xl:grid-cols-2 grid-cols-3 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
           <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mois payés</span>
@@ -552,7 +552,7 @@ export default function TransactionsPage() {
         </div>
 
         {/* Mois en avance */}
-        <div className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+        <div className="group relative col-span-2 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 md:col-span-1">
           <div className="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-slate-100/50 blur-2xl dark:bg-slate-800/50" />
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mois en avance</span>
@@ -608,7 +608,7 @@ export default function TransactionsPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {[
               { label: "Total dû", value: totalPenalitesDues, color: "" },
               { label: "Total payé", value: totalPenalitesPayees, color: "" },
@@ -653,7 +653,7 @@ export default function TransactionsPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total remboursé</p>
               <p className="mt-2 text-xl font-extrabold tabular-nums">
