@@ -21,6 +21,7 @@ interface AddContributionDrawerProps {
   montantMensuelDefaut?: number;
   montantMoisSpecial?: number;
   moisSpecialConfigure?: string;
+  moisSpecialActifDepuis?: string;
   typeContribution?: 'standard' | 'mois-special';
   dateDebutCaisse?: string;
   onSubmit: (data: {
@@ -52,6 +53,7 @@ export default function AddContributionDrawer({
   montantMensuelDefaut = 5000,
   montantMoisSpecial = 10000,
   moisSpecialConfigure = '',
+  moisSpecialActifDepuis = '',
   typeContribution = 'standard',
   dateDebutCaisse = DATE_DEBUT_CAISSE_PAR_DEFAUT,
   onSubmit,
@@ -74,9 +76,11 @@ export default function AddContributionDrawer({
       monthKeyFor(forecastEnd),
       montantMensuelDefaut,
       normaliserMoisSpecial(moisSpecialConfigure),
-      montantMoisSpecial
+      montantMoisSpecial,
+      0,
+      moisSpecialActifDepuis
     );
-  }, [contributions, dateDebutCaisse, futureMonths, membreId, montantMensuelDefaut, montantMoisSpecial, moisSpecialConfigure]);
+  }, [contributions, dateDebutCaisse, futureMonths, membreId, montantMensuelDefaut, montantMoisSpecial, moisSpecialActifDepuis, moisSpecialConfigure]);
 
   const preview = useMemo(
     () => repartirPaiementNormal(Number(montantSaisi), monthStates),
@@ -276,7 +280,7 @@ export default function AddContributionDrawer({
           <button
             type="submit"
             disabled={!membreId || !Number(montantSaisi) || (typeContribution === 'mois-special' && (!selectedSpecialMonth || !specialAllocation))}
-            className="inline-flex items-center gap-2 rounded-xl  px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
             <CheckCircle2 size={16} />
             Valider le versement

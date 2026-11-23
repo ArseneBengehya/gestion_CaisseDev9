@@ -121,17 +121,17 @@ export default function EditEmpruntModal({
         </div>
 
         {montantNum > 0 && (
-          <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-xl space-y-1">
-            <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase">
+          <div className="p-4  rounded-xl space-y-1">
+            <p className="text-xs font-semibold  uppercase">
               Récapitulatif mis à jour
             </p>
-            <div className="flex justify-between text-sm text-slate-700 dark:text-slate-300">
+            <div className="flex justify-between text-slate-700 dark:text-slate-300">
               <span>Intérêt ({tauxNum}%) :</span>
-              <span className="font-bold">+{montantInteret.toLocaleString()} FC</span>
+              <span className="font-serif ">+{montantInteret.toLocaleString()} FC</span>
             </div>
-            <div className="flex justify-between text-base font-extrabold text-amber-700 dark:text-amber-300 pt-1 border-t border-amber-200 dark:border-amber-900">
-              <span>Total à rembourser :</span>
-              <span>{totalARembourser.toLocaleString()} FC</span>
+            <div className="flex justify-between pt-1 border-t border-amber-200 dark:border-amber-900">
+              <span className='text-[13px]'>Total à rembourser :</span>
+              <span className='font-serif'>{totalARembourser.toLocaleString()} FC</span>
             </div>
           </div>
         )}

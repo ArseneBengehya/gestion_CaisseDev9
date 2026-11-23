@@ -39,6 +39,8 @@ interface ConfigDraft {
   cotisationMensuelle: number;
   cotisationMoisSpecial: number;
   moisSpecial: string;
+  moisSpecialActif: boolean;
+  moisSpecialActifDepuis: string;
   dateDebutCaisse: string;
   penaliteRetardActive: boolean;
   moisRetardAvantPenalite: number;
@@ -64,6 +66,9 @@ const normaliserMoisConfig = (value: unknown): string => {
     ? String(Number(month)).padStart(2, '0')
     : '';
 };
+
+const dateActivationLocaleKey = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
 
 const compressLogo = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -108,6 +113,8 @@ export default function ReglesEtParametresPage() {
   const [cotisationMensuelle, setCotisationMensuelle] = useState(5000);
   const [cotisationMoisSpecial, setCotisationMoisSpecial] = useState(10000);
   const [moisSpecial, setMoisSpecial] = useState('');
+  const [moisSpecialActif, setMoisSpecialActif] = useState(false);
+  const [moisSpecialActifDepuis, setMoisSpecialActifDepuis] = useState('');
   const [dateDebutCaisse, setDateDebutCaisse] = useState('2025-01-01');
   const [penaliteRetardActive, setPenaliteRetardActive] = useState(true);
   const [moisRetardAvantPenalite, setMoisRetardAvantPenalite] = useState(2);
@@ -129,6 +136,8 @@ export default function ReglesEtParametresPage() {
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
     moisSpecial: '',
+    moisSpecialActif: false,
+    moisSpecialActifDepuis: '',
     dateDebutCaisse: '2025-01-01',
     penaliteRetardActive: true,
     moisRetardAvantPenalite: 2,
@@ -164,6 +173,8 @@ export default function ReglesEtParametresPage() {
         setCotisationMensuelle(Number.isFinite(cotisationStandard) ? cotisationStandard : 5000);
         setCotisationMoisSpecial(Number.isFinite(cotisationSpeciale) ? cotisationSpeciale : 10000);
         setMoisSpecial(normaliserMoisConfig(data.moisSpecial));
+        setMoisSpecialActif(data.moisSpecialActif === true);
+        setMoisSpecialActifDepuis(typeof data.moisSpecialActifDepuis === 'string' ? data.moisSpecialActifDepuis : '');
         setDateDebutCaisse(data.dateDebutCaisse || '2025-01-01');
         setCaisseLogo(data.caisseLogo || '');
         setPenaliteRetardActive(data.penaliteRetardActive ?? true);
@@ -204,6 +215,7 @@ export default function ReglesEtParametresPage() {
         { rubrique: 'Cotisations', nom: 'Cotisation standard', valeur: `${cotisationMensuelle.toLocaleString('fr-FR')} FC` },
         { rubrique: 'Cotisations', nom: 'Cotisation mois spécial', valeur: `${cotisationMoisSpecial.toLocaleString('fr-FR')} FC` },
         { rubrique: 'Cotisations', nom: 'Mois spécial configuré', valeur: moisSpecial ? new Date(2000, Number(moisSpecial) - 1, 1).toLocaleDateString('fr-FR', { month: 'long' }) : 'Non défini' },
+        { rubrique: 'Cotisations', nom: 'Mois spécial', valeur: moisSpecialActif ? 'Activé' : 'Désactivé' },
         { rubrique: 'Pénalités', nom: 'État', valeur: penaliteRetardActive ? 'Activées' : 'Désactivées' },
         { rubrique: 'Pénalités', nom: 'Seuil de retard', valeur: `${moisRetardAvantPenalite} mois impayés` },
         { rubrique: 'Pénalités', nom: 'Montant', valeur: `${montantPenalite.toLocaleString('fr-FR')} FC` },
@@ -224,6 +236,8 @@ export default function ReglesEtParametresPage() {
       cotisationMensuelle,
       cotisationMoisSpecial,
       moisSpecial,
+      moisSpecialActif,
+      moisSpecialActifDepuis,
       dateDebutCaisse,
       penaliteRetardActive,
       moisRetardAvantPenalite,
@@ -347,7 +361,7 @@ export default function ReglesEtParametresPage() {
 
     if (
       !draftConfig.dateDebutCaisse ||
-      !/^(0[1-9]|1[0-2])$/.test(draftConfig.moisSpecial) ||
+      (draftConfig.moisSpecialActif && !/^(0[1-9]|1[0-2])$/.test(draftConfig.moisSpecial)) ||
       !Number.isFinite(draftConfig.cotisationMensuelle) || draftConfig.cotisationMensuelle < 0 ||
       !Number.isFinite(draftConfig.cotisationMoisSpecial) || draftConfig.cotisationMoisSpecial < 0 ||
       !Number.isInteger(draftConfig.moisRetardAvantPenalite) || draftConfig.moisRetardAvantPenalite < 1 ||
@@ -357,17 +371,26 @@ export default function ReglesEtParametresPage() {
       return;
     }
 
+    const configASauvegarder = {
+      ...draftConfig,
+      moisSpecialActifDepuis: draftConfig.moisSpecialActif
+        ? draftConfig.moisSpecialActifDepuis || dateActivationLocaleKey(new Date())
+        : '',
+    };
+
     setIsSavingSettings(true);
     try {
-      await setDoc(SETTINGS_CONFIG_REF, { ...draftConfig, updatedAt: new Date().toISOString() }, { merge: true });
-      setCotisationMensuelle(draftConfig.cotisationMensuelle);
-      setCotisationMoisSpecial(draftConfig.cotisationMoisSpecial);
-      setMoisSpecial(draftConfig.moisSpecial);
-      setDateDebutCaisse(draftConfig.dateDebutCaisse);
-      setPenaliteRetardActive(draftConfig.penaliteRetardActive);
-      setMoisRetardAvantPenalite(draftConfig.moisRetardAvantPenalite);
-      setMontantPenalite(draftConfig.montantPenalite);
-      setCaisseLogo(draftConfig.caisseLogo);
+      await setDoc(SETTINGS_CONFIG_REF, { ...configASauvegarder, updatedAt: new Date().toISOString() }, { merge: true });
+      setCotisationMensuelle(configASauvegarder.cotisationMensuelle);
+      setCotisationMoisSpecial(configASauvegarder.cotisationMoisSpecial);
+      setMoisSpecial(configASauvegarder.moisSpecial);
+      setMoisSpecialActif(configASauvegarder.moisSpecialActif);
+      setMoisSpecialActifDepuis(configASauvegarder.moisSpecialActifDepuis);
+      setDateDebutCaisse(configASauvegarder.dateDebutCaisse);
+      setPenaliteRetardActive(configASauvegarder.penaliteRetardActive);
+      setMoisRetardAvantPenalite(configASauvegarder.moisRetardAvantPenalite);
+      setMontantPenalite(configASauvegarder.montantPenalite);
+      setCaisseLogo(configASauvegarder.caisseLogo);
       setIsSettingsModalOpen(false);
       showToast('success', 'Paramètres sauvegardés avec succès !');
 
@@ -571,6 +594,9 @@ export default function ReglesEtParametresPage() {
                         ? new Date(2000, Number(moisSpecial) - 1, 1).toLocaleDateString('fr-FR', { month: 'long' })
                         : 'Non défini'}
                     </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {moisSpecialActif ? 'Règle activée' : 'Règle désactivée'}
+                    </p>
                   </div>
                 </div>
               </section>
@@ -699,14 +725,38 @@ export default function ReglesEtParametresPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">Mois spécial concerné</label>
-                <select required value={draftConfig.moisSpecial} onChange={(event) => updateDraft('moisSpecial', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-slate-700">
+                <select required={draftConfig.moisSpecialActif} value={draftConfig.moisSpecial} onChange={(event) => updateDraft('moisSpecial', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:ring-slate-700">
                   <option value="">Choisir un mois</option>
                   {Array.from({ length: 12 }, (_, index) => {
                     const value = String(index + 1).padStart(2, '0');
                     return <option key={value} value={value}>{new Date(2000, index, 1).toLocaleDateString('fr-FR', { month: 'long' })}</option>;
                   })}
                 </select>
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Ce mois spécial se répète automatiquement chaque année.</p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {draftConfig.moisSpecialActif
+                    ? 'La règle s’applique à partir de son activation et se répète chaque année.'
+                    : 'Activez la règle pour appliquer ce mois spécial.'}
+                </p>
+              </div>
+              <div className="flex items-center pt-5">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={draftConfig.moisSpecialActif}
+                    onChange={(event) => {
+                      const active = event.target.checked;
+                      setDraftConfig((current) => ({
+                        ...current,
+                        moisSpecialActif: active,
+                        moisSpecialActifDepuis: active
+                          ? current.moisSpecialActif ? current.moisSpecialActifDepuis : dateActivationLocaleKey(new Date())
+                          : '',
+                      }));
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400 dark:border-slate-600"
+                  />
+                  Activer le mois spécial
+                </label>
               </div>
             </div>
           </section>

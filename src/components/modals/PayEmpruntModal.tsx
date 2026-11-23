@@ -90,7 +90,7 @@ export default function PayEmpruntModal({
                 disabled={isSubmitting}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               >
-                <option value="">-- Choisir un membre --</option>
+                <option value="">Choisir un membre </option>
                 {membresAvecEmprunt.map((membre) => (
                   <option key={membre.id} value={membre.id}>{membre.nom}</option>
                 ))}
@@ -110,7 +110,7 @@ export default function PayEmpruntModal({
                   disabled={isSubmitting}
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                 >
-                  <option value="">-- Choisir un emprunt --</option>
+                  <option value="">Choisir un emprunt</option>
                   {empruntsMembre.map((emprunt) => (
                     <option key={emprunt.id} value={emprunt.id}>
                       {emprunt.montantEmprunte.toLocaleString('fr-FR')} FC empruntés — solde {montantRestantPour(emprunt).toLocaleString('fr-FR')} FC
@@ -121,16 +121,16 @@ export default function PayEmpruntModal({
             )}
 
             {empruntSelectionne && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/60 dark:bg-blue-950/30">
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">Solde à rembourser</p>
-                <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-200">{montantRestantPour(empruntSelectionne).toLocaleString('fr-FR')} FC</p>
+              <div className=" gap-4  p-4 flex ">
+                <p className=" mt-2 text-xs font-semibold tracking-wide ">Solde à rembourser : </p>
+                <p className=" font-serif text-xl ">{montantRestantPour(empruntSelectionne).toLocaleString('fr-FR')} FC</p>
               </div>
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                  <HandCoins size={14} /> Montant payé (FC)
+                  <HandCoins size={14} /> Montant payé
                 </label>
                 <input
                   type="number"
@@ -153,15 +153,15 @@ export default function PayEmpruntModal({
                   className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                 >
                   <option value="CASH">Espèces</option>
-                  <option value="MOBILE_MONEY">Mobile Money</option>
+                  {/* <option value="MOBILE_MONEY">Mobile Money</option>
                   <option value="VIREMENT">Virement</option>
-                  <option value="AUTRE">Autre</option>
+                  <option value="AUTRE">Autre</option> */}
                 </select>
               </div>
             </div>
 
             {montant !== '' && (
-              <p className={`rounded-xl px-4 py-3 text-sm ${depasseSolde ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+              <p className={`rounded-xl px-4 py-3 text-sm ${depasseSolde ? ' text-red-600 dark:text-red-400' : ' text-green-400'}`}>
                 {depasseSolde
                   ? 'Le montant dépasse le solde restant.'
                   : montantValide && empruntSelectionne && montantNumerique === montantRestantPour(empruntSelectionne)
@@ -174,7 +174,7 @@ export default function PayEmpruntModal({
 
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
               <button type="button" onClick={onClose} disabled={isSubmitting} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800">Annuler</button>
-              <button type="submit" disabled={!empruntSelectionne || !montantValide || depasseSolde || isSubmitting} className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900">
+              <button type="submit" disabled={!empruntSelectionne || !montantValide || depasseSolde || isSubmitting} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white">
                 {isSubmitting ? 'Enregistrement...' : 'Enregistrer le paiement'}
               </button>
             </div>

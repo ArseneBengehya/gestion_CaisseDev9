@@ -51,8 +51,13 @@ export default function AddDepenseModal({
             required
             value={motif}
             onChange={(e) => setMotif(e.target.value)}
+<<<<<<< HEAD
             placeholder="entrer le motif"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+=======
+            placeholder="Ex: Achat de fournitures de bureau"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg "
+>>>>>>> 590fed4 (Dernieres modification pour la V1 de l'app)
           />
         </div>
 
@@ -65,7 +70,7 @@ export default function AddDepenseModal({
             value={montant}
             onChange={(e) => setMontant(e.target.value)}
             placeholder="tapez le montant a depenser"
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg "
           />
         </div>
 
@@ -74,7 +79,7 @@ export default function AddDepenseModal({
           <select
             value={categorie}
             onChange={(e) => setCategorie(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
           >
             <option value="Logistique">Logistique</option>
             <option value="Événement">Événement</option>
@@ -92,7 +97,7 @@ export default function AddDepenseModal({
             value={approuvePar}
             onChange={(e) => setApprouvePar(e.target.value)}
             placeholder="Entrez le nom"
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg "
           />
         </div>
 
@@ -106,7 +111,7 @@ export default function AddDepenseModal({
           </button>
           <button
             type="submit"
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
           >
             Enregistrer la dépense
           </button>

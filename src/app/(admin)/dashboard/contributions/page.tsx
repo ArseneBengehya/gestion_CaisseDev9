@@ -131,6 +131,8 @@ export default function ContributionsPage() {
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
     moisSpecial: '',
+    moisSpecialActif: false,
+    moisSpecialActifDepuis: '',
   });
   const [configLoaded, setConfigLoaded] = useState(false);
   const dernierMontantPenaliteSynchro = useRef<number | null>(null);
@@ -170,6 +172,10 @@ export default function ContributionsPage() {
           cotisationMensuelle: data.cotisationMensuelle || 5000,
           cotisationMoisSpecial: data.cotisationMoisSpecial || 10000,
           moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : ''),
+          moisSpecialActif: data.moisSpecialActif === true,
+          moisSpecialActifDepuis: data.moisSpecialActif === true && typeof data.moisSpecialActifDepuis === 'string'
+            ? data.moisSpecialActifDepuis
+            : '',
         });
       }
       setConfigLoaded(true);
@@ -342,7 +348,8 @@ export default function ContributionsPage() {
         montantMensuel,
         caisseConfig.moisSpecial,
         caisseConfig.cotisationMoisSpecial,
-        120
+        120,
+        caisseConfig.moisSpecialActifDepuis
       );
       const moisParContribution = obtenirMoisCouvertsParContributions(memberContribs, caisseConfig.dateDebutCaisse);
       const moisCouverts = new Set(monthStates.filter((month) => month.statut === 'PAYE').map((month) => month.mois));
@@ -449,7 +456,9 @@ export default function ContributionsPage() {
           formData.moisSpecial,
           caisseConfig.cotisationMensuelle,
           caisseConfig.moisSpecial,
-          caisseConfig.cotisationMoisSpecial
+          caisseConfig.cotisationMoisSpecial,
+          0,
+          caisseConfig.moisSpecialActifDepuis
         );
         const targetMonth = monthStates.find((month) => month.mois === formData.moisSpecial);
         const remaining = targetMonth
@@ -482,7 +491,9 @@ export default function ContributionsPage() {
           formData.repartition.at(-1)?.mois || new Date().toISOString().slice(0, 7),
           caisseConfig.cotisationMensuelle,
           caisseConfig.moisSpecial,
-          caisseConfig.cotisationMoisSpecial
+          caisseConfig.cotisationMoisSpecial,
+          0,
+          caisseConfig.moisSpecialActifDepuis
         );
         const statesByMonth = new Map(monthStates.map((month) => [month.mois, month]));
         for (const allocation of formData.repartition) {
@@ -859,7 +870,8 @@ export default function ContributionsPage() {
               : activeTab === 'mois-special'
                 ? <>Mois configuré : <strong>{caisseConfig.moisSpecial
                     ? new Date(2000, Number(caisseConfig.moisSpecial) - 1, 1).toLocaleDateString('fr-FR', { month: 'long' })
-                    : 'non défini'}</strong> · {caisseConfig.cotisationMoisSpecial.toLocaleString()} FC.</>
+                    : 'non défini'}</strong> · {caisseConfig.cotisationMoisSpecial.toLocaleString()} FC
+                    {caisseConfig.moisSpecialActif ? '' : ' · règle désactivée'}.</>
                 : <>Suivi des pénalités enregistrées, des paiements partiels et des soldes restants.</>}
           </p>
         </div>
@@ -877,7 +889,8 @@ export default function ContributionsPage() {
           ) : (
             <button
               onClick={() => setIsDrawerOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              disabled={activeTab === 'mois-special' && !caisseConfig.moisSpecialActif}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
             >
               <PlusCircle size={18} />
               {activeTab === 'cotisations' ? 'Nouvelle Contribution' : 'Nouveau Mois spécial'}
@@ -1017,7 +1030,8 @@ export default function ContributionsPage() {
         dateDebutCaisse={caisseConfig.dateDebutCaisse}
         montantMensuelDefaut={caisseConfig.cotisationMensuelle}
         montantMoisSpecial={caisseConfig.cotisationMoisSpecial}
-        moisSpecialConfigure={caisseConfig.moisSpecial}
+        moisSpecialConfigure={caisseConfig.moisSpecialActif ? caisseConfig.moisSpecial : ''}
+        moisSpecialActifDepuis={caisseConfig.moisSpecialActifDepuis}
         typeContribution={activeTab === 'mois-special' ? 'mois-special' : 'standard'}
         onSubmit={handleAddContribution}
       />

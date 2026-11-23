@@ -11,6 +11,7 @@ import {
   CalendarPlus,
   Wallet,
   ShieldAlert,
+  Banknote,
 } from "lucide-react";
 import type { AllocationCotisation, Contribution } from "../../../../types";
 import PageSkeleton from "../../../../components/ui/PageSkeleton";
@@ -70,20 +71,32 @@ interface ContributionMonthRow {
   datePaiement: string;
 }
 
+interface EmpruntPaymentRow {
+  id: string;
+  empruntId: string;
+  montantVerse: number;
+  modePaiement: string;
+  datePaiement: string;
+}
+
 export default function TransactionsPage() {
   const [rawContributions, setRawContributions] = useState<Contribution[]>([]);
   const [contributionsSpeciales, setContributionsSpeciales] = useState<Contribution[]>([]);
   const [penalites, setPenalites] = useState<Penalite[]>([]);
+  const [paiementsEmprunts, setPaiementsEmprunts] = useState<EmpruntPaymentRow[]>([]);
   const [config, setConfig] = useState({
     dateDebutCaisse: DATE_DEBUT_CAISSE_PAR_DEFAUT,
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
     moisSpecial: "",
+    moisSpecialActifDepuis: "",
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isPenaltiesLoading, setIsPenaltiesLoading] = useState(true);
   const [penaltiesLoadError, setPenaltiesLoadError] = useState(false);
-  const [activeTab, setActiveTab] = useState<"cotisations" | "penalites">("cotisations");
+  const [isLoanPaymentsLoading, setIsLoanPaymentsLoading] = useState(true);
+  const [loanPaymentsLoadError, setLoanPaymentsLoadError] = useState(false);
+  const [activeTab, setActiveTab] = useState<"cotisations" | "penalites" | "emprunts">("cotisations");
 
   // États pour le Modal de détails de transaction
   const [selectedContribution, setSelectedContribution] = useState<ContributionMonthRow | null>(null);
@@ -98,6 +111,7 @@ export default function TransactionsPage() {
     if (!userStr) {
       setIsLoading(false);
       setIsPenaltiesLoading(false);
+      setIsLoanPaymentsLoading(false);
       return;
     }
 
@@ -108,12 +122,14 @@ export default function TransactionsPage() {
       console.error("Session membre invalide :", error);
       setIsLoading(false);
       setIsPenaltiesLoading(false);
+      setIsLoanPaymentsLoading(false);
       return;
     }
 
     if (!session.id) {
       setIsLoading(false);
       setIsPenaltiesLoading(false);
+      setIsLoanPaymentsLoading(false);
       return;
     }
 
@@ -133,6 +149,9 @@ export default function TransactionsPage() {
           cotisationMensuelle: Number(data.cotisationMensuelle || 5000),
           cotisationMoisSpecial: Number(data.cotisationMoisSpecial || 10000),
           moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === "string" ? data.moisSpecial : ""),
+          moisSpecialActifDepuis: data.moisSpecialActif === true && typeof data.moisSpecialActifDepuis === "string"
+            ? data.moisSpecialActifDepuis
+            : "",
         });
       }
     });
@@ -233,11 +252,36 @@ export default function TransactionsPage() {
       setIsPenaltiesLoading(false);
     });
 
+    const empruntPaymentsQuery = query(
+      collection(db, "paiements_emprunts"),
+      where("membreId", "==", session.id)
+    );
+    const unsubscribeEmpruntPayments = onSnapshot(empruntPaymentsQuery, (snapshot) => {
+      setPaiementsEmprunts(snapshot.docs.map((paymentDoc) => {
+        const data = paymentDoc.data();
+        return {
+          id: paymentDoc.id,
+          empruntId: typeof data.empruntId === "string" ? data.empruntId : "",
+          montantVerse: Number(data.montantVerse) || 0,
+          modePaiement: typeof data.modePaiement === "string" ? data.modePaiement : "Non précisé",
+          datePaiement: normaliserDateFirestore(data.datePaiement),
+        };
+      }));
+      setLoanPaymentsLoadError(false);
+      setIsLoanPaymentsLoading(false);
+    }, (error) => {
+      console.error("Erreur lors du chargement des remboursements d’emprunt :", error);
+      setPaiementsEmprunts([]);
+      setLoanPaymentsLoadError(true);
+      setIsLoanPaymentsLoading(false);
+    });
+
     return () => {
       unsubscribeConfig();
       unsubscribeContributions();
       unsubscribeSpecialContributions();
       unsubscribePenalites();
+      unsubscribeEmpruntPayments();
     };
   }, []);
 
@@ -252,7 +296,9 @@ export default function TransactionsPage() {
       `${futureEnd.getFullYear()}-${String(futureEnd.getMonth() + 1).padStart(2, "0")}`,
       config.cotisationMensuelle,
       config.moisSpecial,
-      config.cotisationMoisSpecial
+      config.cotisationMoisSpecial,
+      0,
+      config.moisSpecialActifDepuis
     );
     const contributionsByMonth = new Map<string, Contribution[]>();
     allContributions.forEach((contribution, index) => {
@@ -277,7 +323,7 @@ export default function TransactionsPage() {
         return {
           id: month.mois,
           moisCleTri: month.mois,
-          moisCouvertsText: `${moisFrancais(month.mois)} ${month.mois}`,
+          moisCouvertsText: `${moisFrancais(month.mois)} `,
           statutMois: month.statut,
           montantRequis: month.montantRequis,
           montantMoisPaye: month.montantPaye,
@@ -300,7 +346,9 @@ export default function TransactionsPage() {
       `${futureEnd.getFullYear()}-${String(futureEnd.getMonth() + 1).padStart(2, "0")}`,
       config.cotisationMensuelle,
       config.moisSpecial,
-      config.cotisationMoisSpecial
+      config.cotisationMoisSpecial,
+      0,
+      config.moisSpecialActifDepuis
     );
     const paid = states.filter((month) => month.statut === "PAYE").map((month) => `${moisFrancais(month.mois)} · PAYE`);
     const due = states
@@ -316,7 +364,7 @@ export default function TransactionsPage() {
   const columns: Column<ContributionMonthRow>[] = [
     {
       header: "Mois couverts",
-      accessor: (item) => <span className="font-bold text-slate-900 dark:text-white">{item.moisCouvertsText}</span>,
+      accessor: (item) => <span className="font-semibold  text-xs">{item.moisCouvertsText}</span>,
     },
     {
       header: "Mode de paiement",
@@ -345,13 +393,13 @@ export default function TransactionsPage() {
       header: "Statut",
       accessor: (item) => {
         const status = item.statutMois;
-        const label = status === "PAYE" ? "PAYE" : status === "EN_COURS" ? "EN_COURS" : "EN ATTENTE";
+        const label = status === "PAYE" ? "PAYE" : status === "EN_COURS" ? "EN_COURS" : "ATTENTE";
         const color = status === "PAYE"
           ? "bg-emerald-50 text-emerald-700  dark:bg-emerald-950/50 dark:text-emerald-300"
           : status === "EN_COURS"
             ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
             : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300";
-        return <span className={`px-2.5 py-1 text-[10px] font-bold ${color}`}>{label}</span>;
+        return <span className={` py-1 px-1 text-[11px] lowercase font-bold ${color}`}>{label}</span>;
       },
     },
   ];
@@ -394,6 +442,21 @@ export default function TransactionsPage() {
   const totalPenalitesDues = penalites.reduce((total, penalite) => total + penalite.montantDu, 0);
   const totalPenalitesPayees = penalites.reduce((total, penalite) => total + penalite.montantPaye, 0);
   const totalPenalitesRestantes = penalites.reduce((total, penalite) => total + soldePenalite(penalite), 0);
+  const totalRemboursementsEmprunts = paiementsEmprunts.reduce((total, paiement) => total + paiement.montantVerse, 0);
+  const empruntPaymentColumns: Column<EmpruntPaymentRow>[] = [
+    {
+      header: "Date du paiement",
+      accessor: (item) => item.datePaiement ? formaterDateHeure(item.datePaiement) : "—",
+    },
+    {
+      header: "Mode de paiement",
+      accessor: "modePaiement",
+    },
+    {
+      header: "Montant remboursé",
+      accessor: (item) => <span className="font-semibold">{item.montantVerse.toLocaleString("fr-FR")} FC</span>,
+    },
+  ];
 
   if (isLoading) {
     return <PageSkeleton layout="cards-table" cards={3} columns={5} rows={6} />;
@@ -423,6 +486,17 @@ export default function TransactionsPage() {
           }`}
         >
           <ShieldAlert size={15} /> Pénalités
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("emprunts")}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition-all ${
+            activeTab === "emprunts"
+              ? "bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white"
+              : "text-slate-600 hover:text-slate-900 dark:text-slate-400"
+          }`}
+        >
+          <Banknote size={15} /> Remboursements
         </button>
       </div>
 
@@ -506,7 +580,7 @@ export default function TransactionsPage() {
             data={cotisations}
             columns={columns}
             searchKey="moisCouvertsText"
-            searchPlaceholder="Rechercher par mois (ex: janvier, 2026)..."
+            searchPlaceholder="Rechercher un mois ..."
             onView={(item) => {
               setSelectedContribution(item);
               setIsModalOpen(true);
@@ -525,7 +599,7 @@ export default function TransactionsPage() {
         )}
       </div>
         </>
-      ) : (
+      ) : activeTab === "penalites" ? (
         <section className="space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mes pénalités</h1>
@@ -567,6 +641,51 @@ export default function TransactionsPage() {
               </div>
               <h3 className="mt-3 text-sm font-bold text-slate-900 dark:text-white">Aucune pénalité enregistrée</h3>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Votre situation est à jour.</p>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Mes remboursements d’emprunt</h1>
+            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+              Les paiements enregistrés par la caisse apparaissent ici en temps réel.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Total remboursé</p>
+              <p className="mt-2 text-xl font-extrabold tabular-nums">
+                {totalRemboursementsEmprunts.toLocaleString("fr-FR")} <span className="text-xs font-normal text-slate-500">FC</span>
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Paiements enregistrés</p>
+              <p className="mt-2 text-xl font-extrabold tabular-nums">{paiementsEmprunts.length}</p>
+            </div>
+          </div>
+
+          {isLoanPaymentsLoading ? (
+            <PageSkeleton layout="cards-table" cards={0} columns={3} rows={5} />
+          ) : loanPaymentsLoadError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+              Impossible de charger vos remboursements d’emprunt.
+            </div>
+          ) : paiementsEmprunts.length > 0 ? (
+            <DataTable
+              data={[...paiementsEmprunts].sort((a, b) => (Date.parse(b.datePaiement) || 0) - (Date.parse(a.datePaiement) || 0))}
+              columns={empruntPaymentColumns}
+              searchKey="modePaiement"
+              searchPlaceholder="Rechercher un mode de paiement..."
+            />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+                <Banknote size={24} />
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-slate-900 dark:text-white">Aucun remboursement enregistré</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Les paiements saisis par la caisse s’afficheront ici.</p>
             </div>
           )}
         </section>

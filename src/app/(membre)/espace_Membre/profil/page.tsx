@@ -43,6 +43,7 @@ export default function ProfilPage() {
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
     moisSpecial: "",
+    moisSpecialActifDepuis: "",
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isFinancialSummaryLoading, setIsFinancialSummaryLoading] = useState(true);
@@ -78,6 +79,9 @@ export default function ProfilPage() {
           cotisationMensuelle: Number(data.cotisationMensuelle ?? 5000),
           cotisationMoisSpecial: Number(data.cotisationMoisSpecial ?? 10000),
           moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === "string" ? data.moisSpecial : ""),
+          moisSpecialActifDepuis: data.moisSpecialActif === true && typeof data.moisSpecialActifDepuis === "string"
+            ? data.moisSpecialActifDepuis
+            : "",
         });
       }
       markFinancialSourceLoaded("config");
@@ -209,7 +213,9 @@ export default function ProfilPage() {
     moisActuel,
     config.cotisationMensuelle,
     config.moisSpecial,
-    config.cotisationMoisSpecial
+    config.cotisationMoisSpecial,
+    0,
+    config.moisSpecialActifDepuis
   );
   const detteCotisations = etatsMois
     .filter((month) => month.statut !== "PAYE")

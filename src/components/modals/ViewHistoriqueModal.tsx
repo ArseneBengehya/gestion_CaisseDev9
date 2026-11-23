@@ -79,10 +79,10 @@ export default function ViewHistoriqueModal({
                   const moisLabel = year && month
                     ? new Date(year, month - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
                     : paiement.mois;
-                  const status = paiement.statut || (paiement.montantRequis !== undefined && paiement.montantPaye !== undefined
-                    ? paiement.montantPaye >= paiement.montantRequis ? 'PAYE' : 'EN_COURS'
-                    : 'PAYE');
-                  const statusLabel = status === 'PAYE' ? 'Payé' : status === 'EN_COURS' ? 'En cours' : 'Non payé';
+                  const estPaye = paiement.montantRequis !== undefined && paiement.montantPaye !== undefined
+                    ? paiement.montantPaye >= paiement.montantRequis
+                    : paiement.statut === 'PAYE';
+                  const statusLabel = estPaye ? 'Payé' : 'En cours';
                   return (
                   <tr key={`${paiement.mois}-${paiement.datePaiement}-${index}`} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 font-medium flex items-center gap-2">
@@ -101,11 +101,9 @@ export default function ViewHistoriqueModal({
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        status === 'PAYE'
+                        estPaye
                           ? 'bg-emerald-100 text-emerald-800'
-                          : status === 'EN_COURS'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
                       }`}>
                         {statusLabel}
                       </span>

@@ -17,13 +17,19 @@ import { exportCsv, type CsvColumn } from '@/src/lib/export-csv';
 import PageSkeleton from '@/src/components/ui/PageSkeleton';
 import { dateEcheanceSelonDelai, enregistrerPaiementEmprunt, PalierPret, PALIERS_PRETS_PAR_DEFAUT, trouverPalierPret,} from '@/src/lib/loans';
 
+const estDansDelaiModification = (emprunt: Emprunt, maintenant: number): boolean => {
+  const dateCreation = Date.parse(emprunt.createdAt || emprunt.dateEmprunt);
+  const delaiDepuisCreation = maintenant - dateCreation;
+  return Number.isFinite(dateCreation) && delaiDepuisCreation >= 0 && delaiDepuisCreation <= 120_000;
+};
+
 export default function EmpruntsPage() {
   const [emprunts, setEmprunts] = useState<Emprunt[]>([]);
   const [membres, setMembres] = useState<Membre[]>([]);
   const [paliers, setPaliers] = useState<PalierPret[]>(PALIERS_PRETS_PAR_DEFAUT);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
 
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -177,11 +183,7 @@ export default function EmpruntsPage() {
   // 4. MODIFIER UN EMPRUNT DANS FIRESTORE
   const handleEditEmprunt = async (empruntModifie: Emprunt) => {
     try {
-      const dateCreation = selectedEmprunt
-        ? Date.parse(selectedEmprunt.createdAt || selectedEmprunt.dateEmprunt)
-        : Number.NaN;
-      const delaiDepuisCreation = currentTime - dateCreation;
-      if (!selectedEmprunt || !Number.isFinite(dateCreation) || delaiDepuisCreation < 0 || delaiDepuisCreation > 120_000) {
+      if (!selectedEmprunt || !estDansDelaiModification(selectedEmprunt, currentTime)) {
         setIsEditOpen(false);
         throw new Error("Le délai de modification de deux minutes est dépassé.");
       }
@@ -244,7 +246,7 @@ export default function EmpruntsPage() {
   };
 
   const openEditModal = (emprunt: Emprunt) => {
-    if (currentTime - Date.parse(emprunt.createdAt || emprunt.dateEmprunt) > 120_000) {
+    if (!estDansDelaiModification(emprunt, currentTime)) {
       showToast('error', 'Le délai de modification de deux minutes est dépassé.');
       return;
     }
@@ -316,37 +318,30 @@ export default function EmpruntsPage() {
         );
       },
     },
-    // {
-    //   header: 'Actions',
-    //   accessor: (item) => {
-    //     const dateCreation = Date.parse(item.createdAt || item.dateEmprunt);
-    //     const estModifiable = Number.isFinite(dateCreation) && currentTime - dateCreation <= 120_000 && currentTime >= dateCreation;
-    //     const solde = item.montantRestant ?? item.montantTotalARembourser;
-    //     return (
-    //     <div className="flex items-center gap-2">
-    //       {solde > 0 && (
-    //         <>
-    //           {estModifiable && (
-    //           <button
-    //             onClick={() => openEditModal(item)}
-    //             className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-    //             title="Modification disponible pendant deux minutes"
-    //           >
-    //             <Edit size={14} />
-    //           </button>
-    //           )}
-    //           <button
-    //             onClick={() => setIsPayOpen(true)}
-    //             className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-    //           >
-    //             <Banknote size={14} /> Payer
-    //           </button>
-    //         </>
-    //       )}
-    //     </div>
-    //     );
-    //   },
-    // },
+    ...(emprunts.some((emprunt) => estDansDelaiModification(emprunt, currentTime)) ? [{
+      header: 'Actions',
+      accessor: (item) => {
+        const estModifiable = estDansDelaiModification(item, currentTime);
+        const solde = item.montantRestant ?? item.montantTotalARembourser;
+        return (
+        <div className="flex items-center gap-2">
+          {solde > 0 && (
+            <>
+              {estModifiable && (
+              <button
+                onClick={() => openEditModal(item)}
+                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                title="Modification disponible pendant deux minutes"
+              >
+                <Edit size={14} />
+              </button>
+              )}
+            </>
+          )}
+        </div>
+        );
+      },
+    } as Column<Emprunt>] : []),
   ];
 
   const totalEncours = emprunts
@@ -383,10 +378,10 @@ export default function EmpruntsPage() {
             Suivez les prêts accordés aux membres de la Caisse Dev9 et les remboursements en temps réel.
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
           >
             <PlusCircle size={18} /> Emprunter
           </button>

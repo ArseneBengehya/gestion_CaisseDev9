@@ -7,6 +7,7 @@ import type {
 } from '@/src/types';
 import {
   obtenirMoisCouvertsParContributions,
+  normaliserDateFirestore,
   type ContributionMonthRecord,
 } from '@/src/lib/contribution-months';
 
@@ -21,6 +22,24 @@ export const normaliserMoisSpecial = (value: string): string => {
   const match = value.match(/^(?:\d{4}-)?(\d{1,2})$/);
   const month = match ? Number(match[1]) : 0;
   return month >= 1 && month <= 12 ? String(month).padStart(2, '0') : '';
+};
+
+export const estMoisSpecialApplicable = (
+  mois: string,
+  moisSpecial: string,
+  actifDepuis?: string
+): boolean => {
+  const monthNumber = normaliserMoisSpecial(moisSpecial);
+  if (!monthNumber || !mois.endsWith(`-${monthNumber}`)) return false;
+  if (actifDepuis === undefined) return true;
+
+  const activationDate = actifDepuis.match(/^(\d{4})-(0[1-9]|1[0-2])/);
+  if (!activationDate) return false;
+
+  const premiereAnneeSpeciale = Number(activationDate[2]) <= Number(monthNumber)
+    ? Number(activationDate[1])
+    : Number(activationDate[1]) + 1;
+  return Number(mois.slice(0, 4)) >= premiereAnneeSpeciale;
 };
 
 export const statutMoisCotisation = (
@@ -39,13 +58,22 @@ export const genererEtatsMoisCotisation = (
   montantMensuel: number,
   moisSpecial: string,
   montantMoisSpecial: number,
-  moisAdditionnels = 0
+  moisAdditionnels = 0,
+  moisSpecialActifDepuis?: string
 ): EtatMoisCotisation[] => {
   const monthNumber = normaliserMoisSpecial(moisSpecial);
   const contributionMonths = obtenirMoisCouvertsParContributions(contributions, dateDebut);
   const amounts = new Map<string, number>();
+  const amountsPaidBeforeActivation = new Map<string, number>();
+  const activationTime = moisSpecialActifDepuis === undefined
+    ? Number.NaN
+    : Date.parse(normaliserDateFirestore(moisSpecialActifDepuis));
 
   contributions.forEach((contribution, index) => {
+    const contributionTime = Date.parse(normaliserDateFirestore(contribution.datePaiement));
+    const wasPaidBeforeActivation = Number.isFinite(activationTime) &&
+      Number.isFinite(contributionTime) &&
+      contributionTime < activationTime;
     if (Array.isArray(contribution.repartition)) {
       contribution.repartition.forEach((rawAllocation) => {
         if (!rawAllocation || typeof rawAllocation !== 'object') return;
@@ -55,6 +83,12 @@ export const genererEtatsMoisCotisation = (
         const amount = Number(allocation.montantVerse);
         if (Number.isFinite(amount) && amount > 0) {
           amounts.set(allocation.mois, (amounts.get(allocation.mois) || 0) + amount);
+          if (wasPaidBeforeActivation) {
+            amountsPaidBeforeActivation.set(
+              allocation.mois,
+              (amountsPaidBeforeActivation.get(allocation.mois) || 0) + amount
+            );
+          }
         }
       });
       return;
@@ -70,6 +104,12 @@ export const genererEtatsMoisCotisation = (
     covered.forEach((month) => {
       const required = isSpecial ? montantMoisSpecial : montantMensuel;
       amounts.set(month, Math.max(amounts.get(month) || 0, required));
+      if (wasPaidBeforeActivation) {
+        amountsPaidBeforeActivation.set(
+          month,
+          (amountsPaidBeforeActivation.get(month) || 0) + required
+        );
+      }
     });
   });
 
@@ -85,7 +125,12 @@ export const genererEtatsMoisCotisation = (
   for (let index = 0; index < totalMonths; index += 1) {
     const date = new Date(startYear, startMonth - 1 + index, 1);
     const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    const type: TypeCotisation = monthNumber && monthKey.endsWith(`-${monthNumber}`)
+    const activationMonth = moisSpecialActifDepuis?.slice(0, 7);
+    const paidBeforeActivation = activationMonth === monthKey &&
+      (amountsPaidBeforeActivation.get(monthKey) || 0) >= montantMensuel;
+    const type: TypeCotisation = monthNumber &&
+      estMoisSpecialApplicable(monthKey, monthNumber, moisSpecialActifDepuis) &&
+      !paidBeforeActivation
       ? 'SPECIALE'
       : 'NORMALE';
     const amountPaid = amounts.get(monthKey) || 0;

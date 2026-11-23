@@ -5,7 +5,7 @@ import { AlertTriangle, ArrowRight, ArrowUpRight, CalendarDays, ShieldAlert, Tre
 import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/src/lib/firebase';
 import { ContributionMonthRecord, DATE_DEBUT_CAISSE_PAR_DEFAUT } from '@/src/lib/contribution-months';
-import { genererEtatsMoisCotisation, normaliserMoisSpecial } from '@/src/lib/contribution-payments';
+import { estMoisSpecialApplicable, genererEtatsMoisCotisation, normaliserMoisSpecial } from '@/src/lib/contribution-payments';
 import DebtCalendar, { MonthlyDebtMember } from '@/src/components/ui/DebtCalendar';
 import ExportCsvButton from '@/src/components/ui/ExportCsvButton';
 import PageSkeleton from '@/src/components/ui/PageSkeleton';
@@ -72,8 +72,9 @@ const amountForMonth = (
   month: string,
   monthlyAmount: number,
   specialAmount: number,
-  specialMonth: string
-): number => (month && specialMonth && month.endsWith(`-${normaliserMoisSpecial(specialMonth)}`)
+  specialMonth: string,
+  specialActiveSince: string
+): number => (estMoisSpecialApplicable(month, specialMonth, specialActiveSince)
   ? specialAmount
   : monthlyAmount);
 
@@ -102,6 +103,7 @@ export default function AdminDashboardPage() {
     let cotisationMensuelle = 5000;
     let cotisationMoisSpecial = 10000;
     let moisSpecial = '';
+    let moisSpecialActifDepuis = '';
     let dateDebut = DATE_DEBUT_CAISSE_PAR_DEFAUT;
     let loadedSources = 0;
     const sourceCount = 9;
@@ -136,7 +138,13 @@ export default function AdminDashboardPage() {
         cursor = incrementMonthKey(cursor);
       }
       const montantNormalParMembre = moisAttendus.reduce(
-        (total, month) => total + amountForMonth(month, cotisationMensuelle, cotisationMoisSpecial, moisSpecial),
+        (total, month) => total + amountForMonth(
+          month,
+          cotisationMensuelle,
+          cotisationMoisSpecial,
+          moisSpecial,
+          moisSpecialActifDepuis
+        ),
         0
       );
       setTotalNormal(membresActifs.length * montantNormalParMembre);
@@ -150,7 +158,8 @@ export default function AdminDashboardPage() {
           cotisationMensuelle,
           moisSpecial,
           cotisationMoisSpecial,
-          1
+          1,
+          moisSpecialActifDepuis
         );
         const statesByMonth = new Map(monthStates.map((month) => [month.mois, month]));
         if (
@@ -322,6 +331,9 @@ export default function AdminDashboardPage() {
         cotisationMensuelle = Number(data.cotisationMensuelle) || 5000;
         cotisationMoisSpecial = Number(data.cotisationMoisSpecial) || 10000;
         moisSpecial = normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : '');
+        moisSpecialActifDepuis = data.moisSpecialActif === true && typeof data.moisSpecialActifDepuis === 'string'
+          ? data.moisSpecialActifDepuis
+          : '';
       }
       refreshDashboard();
       markSourceLoaded();

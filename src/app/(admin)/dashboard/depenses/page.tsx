@@ -220,7 +220,7 @@ export default function DepensesPage() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIsAddOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-sm font-semibold rounded-xl shadow-sm transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-600 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
           >
             <PlusCircle size={18} />
             Nouvelle Dépense

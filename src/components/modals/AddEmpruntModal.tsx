@@ -71,22 +71,22 @@ export default function AddEmpruntModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Octroyer un Emprunt (Caisse Dev9)" maxWidth="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Octroyer un Emprunt" maxWidth="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Sélection du membre */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300  mb-1">
             Membre Emprunteur
           </label>
           <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+            <span className="absolute inset-y-0 left-0 flex items-center pl-3 ">
               <User size={16} />
             </span>
             <select
               required
               value={membreId}
               onChange={(e) => setMembreId(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
+              className="w-full pl-9 pr-3 py-2 text-sm  border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 font-medium"
             >
               <option value="">Sélectionner un membre...</option>
               {membres.map((m) => (
@@ -100,7 +100,7 @@ export default function AddEmpruntModal({
 
         {/* Montant de l'emprunt */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300  mb-1">
             Montant de l'emprunt (FC)
           </label>
           <div className="relative">
@@ -114,7 +114,7 @@ export default function AddEmpruntModal({
               value={montant}
               onChange={(e) => setMontant(e.target.value)}
               placeholder="tapez le montant à emprunter"
-              className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
+              className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800  rounded-lg focus:ring-2 focus:ring-blue-500 font-medium"
             />
           </div>
         </div>
@@ -122,10 +122,10 @@ export default function AddEmpruntModal({
         {/* Taux d'intérêt défini par le palier configuré */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 ">
               Taux d'intérêt (%)
             </label>
-            <span className="text-[11px] text-blue-600 dark:text-blue-400 flex items-center gap-1 font-medium">
+            <span className="text-[11px] flex items-center gap-1 font-medium">
               <Info size={12} /> Selon le palier
             </span>
           </div>
@@ -141,24 +141,24 @@ export default function AddEmpruntModal({
 
         {/* Carte de calcul dynamique de l'intérêt et du total */}
         {montantNum > 0 && (
-          <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl space-y-1">
-            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase">
+          <div className="p-4 space-y-1">
+            <p className="text-xs font-semibold ">
               Récapitulatif de l'Emprunt
             </p>
             <div className="flex justify-between text-sm text-slate-700 dark:text-slate-300">
               <span>Intérêt ({tauxNum}%) :</span>
-              <span className="font-bold">+{montantInteret.toLocaleString()} FC</span>
+              <span className="font-bold font-serif">+{montantInteret.toLocaleString()} FC</span>
             </div>
-            <div className="flex justify-between text-base font-extrabold text-blue-700 dark:text-blue-300 pt-1 border-t border-blue-200 dark:border-blue-900">
+            <div className="flex justify-between text-sm font-semibold pt-1 border-t border-blue-200 dark:border-blue-900">
               <span>Total à rembourser :</span>
-              <span>{totalARembourser.toLocaleString()} FC</span>
+              <span className='font-serif'>{totalARembourser.toLocaleString()} FC</span>
             </div>
           </div>
         )}
 
         {/* Date d'échéance */}
         <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
             Date limite de remboursement (Échéance)
           </label>
           <div className="relative">

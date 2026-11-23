@@ -86,6 +86,7 @@ export default function RetardsPage() {
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
     moisSpecial: '',
+    moisSpecialActifDepuis: '',
     penaliteRetardActive: true,
     moisRetardAvantPenalite: 2,
     montantPenalite: 1000,
@@ -105,6 +106,9 @@ export default function RetardsPage() {
           cotisationMensuelle: Number.isFinite(cotisationMensuelle) ? cotisationMensuelle : 5000,
           cotisationMoisSpecial: Number.isFinite(cotisationMoisSpecial) ? cotisationMoisSpecial : 10000,
           moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === 'string' ? data.moisSpecial : ''),
+          moisSpecialActifDepuis: data.moisSpecialActif === true && typeof data.moisSpecialActifDepuis === 'string'
+            ? data.moisSpecialActifDepuis
+            : '',
           penaliteRetardActive: data.penaliteRetardActive ?? true,
           moisRetardAvantPenalite:
             Number.isFinite(moisRetardAvantPenalite) && moisRetardAvantPenalite >= 1
@@ -269,7 +273,9 @@ export default function RetardsPage() {
             moisActuel,
             caisseConfig.cotisationMensuelle,
             caisseConfig.moisSpecial,
-            caisseConfig.cotisationMoisSpecial
+            caisseConfig.cotisationMoisSpecial,
+            0,
+            caisseConfig.moisSpecialActifDepuis
           ).filter((month) => month.statut !== 'PAYE').map((month) => month.mois);
           return assurerPenalites(
             membre.id,
@@ -300,7 +306,9 @@ export default function RetardsPage() {
           moisActuel,
           caisseConfig.cotisationMensuelle,
           caisseConfig.moisSpecial,
-          caisseConfig.cotisationMoisSpecial
+          caisseConfig.cotisationMoisSpecial,
+          0,
+          caisseConfig.moisSpecialActifDepuis
         ).filter((month) => month.statut !== 'PAYE');
         const moisImpayes = moisImpayesStates.map((month) => month.mois);
         const moisEnRetard = moisImpayes.length;
@@ -549,7 +557,7 @@ export default function RetardsPage() {
                     className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl shadow-sm transition-all ${
                       sentSuccessId === membre.id
                         ? 'bg-emerald-100 dark:bg-emerald-950/60 '
-                        : 'bg-blue-500 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
+                        : 'bg-blue-500 text-white hover:bg-blue-400 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
                     }`}
                   >
                     {sendingId === membre.id ? (

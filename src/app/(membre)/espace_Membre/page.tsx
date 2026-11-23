@@ -61,7 +61,13 @@ interface ExpenseRow {
 
 interface MovementRow {
   id: string;
-  type: "contribution" | "contribution-speciale" | "depense" | "emprunt";
+  type:
+    | "contribution"
+    | "contribution-speciale"
+    | "depense"
+    | "emprunt"
+    | "remboursement-emprunt"
+    | "paiement-penalite";
   date: string;
   amount: number;
   label: string;
@@ -86,6 +92,7 @@ export default function EspaceMembrePage() {
     cotisationMensuelle: 5000,
     cotisationMoisSpecial: 10000,
     moisSpecial: "",
+    moisSpecialActifDepuis: "",
   });
   const [movements, setMovements] = useState<MovementRow[]>([]);
   const [monthModal, setMonthModal] = useState<"paid" | "unpaid" | "advance" | null>(null);
@@ -114,6 +121,9 @@ export default function EspaceMembrePage() {
           cotisationMensuelle: Number(data.cotisationMensuelle || 5000),
           cotisationMoisSpecial: Number(data.cotisationMoisSpecial || 10000),
           moisSpecial: normaliserMoisSpecial(typeof data.moisSpecial === "string" ? data.moisSpecial : ""),
+          moisSpecialActifDepuis: data.moisSpecialActif === true && typeof data.moisSpecialActifDepuis === "string"
+            ? data.moisSpecialActifDepuis
+            : "",
         });
       }
       markSummarySourceLoaded("config");
@@ -225,7 +235,21 @@ export default function EspaceMembrePage() {
     }));
 
     unsubscribers.push(onSnapshot(collection(db, "paiements_emprunts"), (snapshot) => {
-      setTotalLoanRepayments(snapshot.docs.reduce((sum, item) => sum + Number(item.data().montantVerse || 0), 0));
+      const rows = snapshot.docs.map((item): MovementRow => {
+        const data = item.data();
+        return {
+          id: item.id,
+          type: "remboursement-emprunt",
+          date: normaliserDateFirestore(data.datePaiement),
+          amount: Number(data.montantVerse || 0),
+          label: "Remboursement d’emprunt enregistré",
+        };
+      });
+      setTotalLoanRepayments(rows.reduce((sum, row) => sum + row.amount, 0));
+      setMovements((current) => [
+        ...current.filter((item) => item.type !== "remboursement-emprunt"),
+        ...rows,
+      ]);
       markSummarySourceLoaded("paiements-emprunts");
     }, (error) => {
       console.error("Erreur lors du chargement des remboursements d’emprunts :", error);
@@ -234,7 +258,21 @@ export default function EspaceMembrePage() {
     }));
 
     unsubscribers.push(onSnapshot(collection(db, "paiements_penalites"), (snapshot) => {
-      setTotalPenaltyRepayments(snapshot.docs.reduce((sum, item) => sum + Number(item.data().montantVerse || 0), 0));
+      const rows = snapshot.docs.map((item): MovementRow => {
+        const data = item.data();
+        return {
+          id: item.id,
+          type: "paiement-penalite",
+          date: normaliserDateFirestore(data.datePaiement),
+          amount: Number(data.montantVerse || 0),
+          label: "Paiement de pénalité enregistré",
+        };
+      });
+      setTotalPenaltyRepayments(rows.reduce((sum, row) => sum + row.amount, 0));
+      setMovements((current) => [
+        ...current.filter((item) => item.type !== "paiement-penalite"),
+        ...rows,
+      ]);
       markSummarySourceLoaded("paiements-penalites");
     }, (error) => {
       console.error("Erreur lors du chargement des paiements de pénalités :", error);
@@ -267,7 +305,9 @@ export default function EspaceMembrePage() {
       `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, "0")}`,
       config.cotisationMensuelle,
       config.moisSpecial,
-      config.cotisationMoisSpecial
+      config.cotisationMoisSpecial,
+      0,
+      config.moisSpecialActifDepuis
     );
     const formatMonth = (key: string) => new Date(`${key}-01T00:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
     const paid = monthStates.filter((month) => month.statut === "PAYE").map((month) => ({
@@ -377,7 +417,7 @@ export default function EspaceMembrePage() {
               <HandCoins size={15} />
             </div>
           </div>
-          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl text-black dark:text-slate-400">
+          <p className="relative mt-2 whitespace-nowrap text-lg font-extrabold tabular-nums tracking-tight xl:text-xl">
             {activeLoanTotal.toLocaleString()} <span className="text-xs font-normal text-black dark:text-slate-400">FC</span>
           </p>
           <button onClick={() => setLoanModal(true)} className="inline-flex ml-63 gap-1 text-[11px] font-semibold text-slate-900 transition-colors hover:underline dark:text-white cursor-pointer">

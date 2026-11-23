@@ -55,7 +55,7 @@ export default function AddRegleModal({ isOpen, onClose, onAdd }: AddRegleModalP
         </div>
 
         <div>
-          <label className="block text-xs font-semibold uppercase text-slate-700 dark:text-slate-300 mb-1.5">
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
             Détails des règles (Séparez chaque point par un saut de ligne)
           </label>
           <textarea

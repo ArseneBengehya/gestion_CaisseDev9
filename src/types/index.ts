@@ -111,6 +111,8 @@ export interface RegleCaisse {
   cotisationMensuelle: number; // Ex: 5000
   cotisationMoisSpecial?: number;
   moisSpecial?: string; // Numéro du mois (1-12), sans année
+  moisSpecialActif?: boolean;
+  moisSpecialActifDepuis?: string; // Date et heure locales de la dernière activation
   devise: string; // Ex: 'FC', 'USD'
   jourLimitePaiement: number; // Ex: Le 5 de chaque mois
   penaliteRetardActive: boolean;
