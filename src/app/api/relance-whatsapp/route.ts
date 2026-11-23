@@ -96,10 +96,11 @@ _Caisse Dev9 - Système Automatisé de Gestion_`;
     }
 
     return NextResponse.json({ success: true, messageId: data.idMessage });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erreur API WhatsApp:', error);
+    const message = error instanceof Error ? error.message : 'Erreur interne du serveur';
     return NextResponse.json(
-      { error: error.message || 'Erreur interne du serveur' },
+      { error: message },
       { status: 500 }
     );
   }

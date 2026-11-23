@@ -3,7 +3,7 @@
 import React from 'react';
 import Modal from '../ui/Modal';
 import { Membre } from '@/src/types';
-import { UserRound, Save, Shield, Upload, Image as ImageIcon } from 'lucide-react';
+import { UserRound, Save, Shield } from 'lucide-react';
 
 interface EditMembreModalProps {
   isOpen: boolean;
@@ -19,10 +19,8 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
   const [telephone, setTelephone] = React.useState('');
   const [statut, setStatut] = React.useState<'ACTIF' | 'INACTIF'>('ACTIF');
   const [role, setRole] = React.useState<'ADMIN' | 'MEMBRE'>('MEMBRE');
-  const [photoError, setPhotoError] = React.useState('');
   const [submitError, setSubmitError] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!membre) return;
@@ -73,10 +71,10 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800/60">
           <div className="rounded-xl bg-white p-2.5 text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-200">
-              {photoPreview ? (
-                <img src={photoPreview}  className="h-9 w-9 rounded-full object-cover" />
+              {membre?.photoUrl ? (
+                <img src={membre.photoUrl} alt={`Photo de ${membre.nomComplet || 'membre'}`} className="h-9 w-9 rounded-full object-cover" />
               ) : (
-                <UserRound  />
+                <UserRound />
               )}
           </div>
           <div>
@@ -122,7 +120,7 @@ export default function EditMembreModal({ isOpen, onClose, membre, onSubmit }: E
 
         <div className="flex justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
           <button type="button" onClick={onClose} disabled={isSaving} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Annuler</button>
-          <button type="submit" disabled={isSaving || !membre || Boolean(photoError)} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white">
+          <button type="submit" disabled={isSaving || !membre} className="inline-flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white">
             <Save size={16} /> {isSaving ? 'Enregistrement...' : 'Mettre à jour'}
           </button>
         </div>

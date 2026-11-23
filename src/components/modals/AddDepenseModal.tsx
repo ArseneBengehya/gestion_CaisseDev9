@@ -51,13 +51,8 @@ export default function AddDepenseModal({
             required
             value={motif}
             onChange={(e) => setMotif(e.target.value)}
-<<<<<<< HEAD
-            placeholder="entrer le motif"
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-=======
             placeholder="Ex: Achat de fournitures de bureau"
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg "
->>>>>>> 590fed4 (Dernieres modification pour la V1 de l'app)
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 

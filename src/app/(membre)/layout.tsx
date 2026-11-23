@@ -34,7 +34,14 @@ export default function MembreLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // États pour les notifications et le modal
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    date?: string;
+    titre?: string;
+    message?: string;
+    lu?: boolean;
+    read?: boolean;
+  }>>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -104,11 +111,18 @@ export default function MembreLayout({
     const notifsRef = collection(db, "notifications");
     const qNotifs = query(notifsRef, where("membreId", "in", [user.id, "TOUS"]));
     const unsubscribeNotifs = onSnapshot(qNotifs, (snapshot) => {
-      const notifsList = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
-      notifsList.sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+      const notifsList = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          date: typeof data.date === 'string' ? data.date : '',
+          titre: typeof data.titre === 'string' ? data.titre : '',
+          message: typeof data.message === 'string' ? data.message : '',
+          lu: data.lu === true,
+          read: data.read === true,
+        };
+      });
+      notifsList.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
       setNotifications(notifsList);
     });
 
@@ -352,7 +366,7 @@ export default function MembreLayout({
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
             <div className="mx-auto w-full max-w-3xl space-y-3">
               {notifications.length > 0 ? (
-                notifications.map((notif: any) => (
+                notifications.map((notif) => (
                   <article
                     key={notif.id}
                     className={`rounded-xl border p-4 transition-colors sm:p-5 ${
