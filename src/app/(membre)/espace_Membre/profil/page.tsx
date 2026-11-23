@@ -446,7 +446,7 @@ export default function ProfilPage() {
                   <CheckCircle2 size={14} /> Statut financier
                 </p>
                 <p className={`font-bold text-base ${detteActuelle > 0 ? "" : ""}`}>
-                  {isFinancialSummaryLoading ? "Chargement…" : hasFinancialSummaryError ? "Indisponible" : detteActuelle > 0 ? "Solde à payer" : "À jour"}
+                  {isFinancialSummaryLoading ? "Chargement…" : hasFinancialSummaryError ? "Indisponible" : detteActuelle > 0 ? "Pas à jour" : "À jour"}
                 </p>
               </div>
 
